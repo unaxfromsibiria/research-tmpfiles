@@ -46,6 +46,16 @@ func (calcData *CalcDataRequest) Bind(r *http.Request) error {
 	return nil
 }
 
+// Answer format.
+type CalcResultResponse struct {
+	datast.SimpleCalcResult
+}
+
+// Uses chi/render iface.
+func (answer *CalcResultResponse) Render(w http.ResponseWriter, r *http.Request) error {
+	return nil
+}
+
 func mainPage(w http.ResponseWriter, request *http.Request) {
 	resp := `<html>
 	<body><b>Main page.</b></body>
@@ -55,14 +65,15 @@ func mainPage(w http.ResponseWriter, request *http.Request) {
 
 func calcClientData(w http.ResponseWriter, request *http.Request) {
 	defer request.Body.Close()
-	answer := SimpleAnwser{}
 	calcData := CalcDataRequest{}
 	if err := render.Bind(request, &calcData); err != nil {
-		answer.Error = fmt.Sprintf("Data format error: %s", err)
+		answer := SimpleAnwser{
+			Error: fmt.Sprintf("Data format error: %s", err)}
+		render.Render(w, request, &answer)
 	} else {
-		answer.Message = calcData.A[0]
+		answer := CalcResultResponse{*(calcData.Calc())}
+		render.Render(w, request, &answer)
 	}
-	render.Render(w, request, &answer)
 }
 
 // For example only.

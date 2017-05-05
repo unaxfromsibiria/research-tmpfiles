@@ -6,12 +6,44 @@ import (
 	"fmt"
 	"log"
 	"math/rand"
+	"strconv"
 )
+
+// Calc results.
+type SimpleCalcResult struct {
+	A string `json:"a"`
+	B string `json:"b"`
+	C string `json:"c"`
+}
 
 // Content of source calc data.
 type SimpleJSONMsg struct {
 	A []string `json:"a"`
 	B []string `json:"b"`
+}
+
+// Create result.
+func (msg *SimpleJSONMsg) Calc() *SimpleCalcResult {
+	a, b := .0, .0
+	for _, val := range msg.A {
+		if fval, err := strconv.ParseFloat(val, 32); err != nil {
+			log.Fatalln(err)
+		} else {
+			a += fval
+		}
+	}
+	for _, val := range msg.B {
+		if fval, err := strconv.ParseFloat(val, 32); err != nil {
+			log.Fatalln(err)
+		} else {
+			b += fval
+		}
+	}
+	b = b / float64(len(msg.B))
+	return &(SimpleCalcResult{
+		A: fmt.Sprintf("%.6f", a),
+		B: fmt.Sprintf("%.6f", b),
+		C: fmt.Sprintf("%.6f", a/b)})
 }
 
 // Create random data.
