@@ -1,18 +1,20 @@
 #!/usr/bin/env python3
 
-import uuid
-import smtplib
+import picamera
 import os
+import smtplib
 import signal
 import time
+import tempfile
+import uuid
 from datetime import datetime
-from os.path import join as path_join
+from dotenv import load_dotenv, find_dotenv
 from email.mime.multipart import MIMEMultipart
 from email.mime.base import MIMEBase
 from email.mime.text import MIMEText
 from email.utils import COMMASPACE, formatdate
 from email import encoders
-from dotenv import load_dotenv, find_dotenv
+from os.path import join as path_join
 
 import RPi.GPIO as gpio
 
@@ -27,12 +29,95 @@ SENSOR_PIN = int(
 SEND_TIME_INTERVAL_LIMIT = int(
     os.environ.get("SEND_TIME_INTERVAL_LIMIT") or 30)
 LIGHT_ON_TIME_LIMIT = 3600 // 2
-state = {"active": True}
-run_inst = uuid.uuid4().hex
-log_file_name = "move-{}.log".format(run_inst)
+TMP_DIR = os.environ.get("TMP_DIR") or tempfile.mkdtemp()
+IMAGE_SIZE = os.environ.get("IMAGE_SIZE") or ""
 
 
-print("log file: {}".format(log_file_name))
+class FileList(list):
+
+    def clear(self):
+        if self:
+            for file_path in self:
+                try:
+                    os.remove(file_path)
+                except Exception as err:
+                    manager.log(err, "file remove")
+        super().clear()
+
+
+class SytemManager:
+
+    state = None
+    inst_id = log_file_name = None
+    _camera_conf = None
+
+    def __init__(self):
+        self.inst_id = code = uuid.uuid4().hex[:4]
+        self.state = {
+            "active": True,
+        }
+        self.log_file_name = "move-{}.log".format(code)
+        print("log file: {}".format(self.log_file_name))
+        self._camera_conf = {
+            "framerate": 30,
+            "resolution": (1280, 960),
+        }
+        try:
+            w, h = map(int, IMAGE_SIZE.split(','))
+        except (TypeError, ValueError):
+            pass
+        else:
+            self._camera_conf["resolution"] = (w, h)
+
+    @property
+    def is_active(self) -> bool:
+        return bool(self.state.get("active"))
+
+    def stop(self):
+        self.log("termination...")
+        self.state["active"] = False
+
+    def log(self, msg, where=None):
+        """Show logs
+        """
+        msg = "[{}]: {}{}".format(
+            datetime.now().isoformat()[:19],
+            msg,
+            " ({})".format(where) if where else "")
+        print(msg)
+        try:
+            with open(self.log_file_name, mode="a") as log_file:
+                log_file.write("{}\n".format(msg))
+        except Exception as err:
+            print(err)
+
+    def photos(self, count=3) -> list:
+        """Make photos to files.
+        """
+        result = []
+        call_code = uuid.uuid4().hex[:4]
+        result.extend((
+            os.path.join(TMP_DIR, "{}_{}{:02}.jpg".format(
+                datetime.now().strftime("%d%m%y%H%M%S"),
+                call_code,
+                index))
+            for index in range(count)
+        ))
+
+        try:
+            with picamera.PiCamera(**self._camera_conf) as cam:
+                cam.start_preview()
+                time.sleep(0.1)
+                cam.capture_sequence(
+                    result, use_video_port=True)
+                cam.stop_preview()
+        except Exception as err:
+            self.log(err, "camera")
+
+        return filter(os.path.isfile, result)
+
+
+manager = SytemManager()
 
 
 def light_turnon():
@@ -47,7 +132,7 @@ def light_turnon():
             gpio.output(LIGHT_PIN, False)
             time.sleep(0.1)
     except Exception as err:
-        log(err, "light turn on")
+        manager.log(err, "light turn on")
     return True
 
 
@@ -57,32 +142,10 @@ def light_turnoff():
     return True
 
 
-def make_photo():
-    """Make photo to files.
-    """
-    return True
-
-
-def log(msg, where=None):
-    """Show logs
-    """
-    msg = "[{}]: {}{}".format(
-        datetime.now().isoformat()[:19],
-        msg,
-        " ({})".format(where) if where else "")
-    print(msg)
-    try:
-        with open(log_file_name, mode="a") as log_file:
-            log_file.write("{}\n".format(msg))
-    except Exception as err:
-        print(err)
-
-
 def finish_handler(signum, frame):
     """SIGINT handler.
     """
-    log("termination...")
-    state['active'] = False
+    manager.stop()
 
 
 def prepare():
@@ -93,7 +156,7 @@ def prepare():
         gpio.setup(SENSOR_PIN, gpio.IN)
         gpio.setup(LIGHT_PIN, gpio.OUT)
     except Exception as err:
-        log(err, "prepare GPIO")
+        manager.log(err, "prepare GPIO")
     else:
         signal.signal(signal.SIGINT, finish_handler)
         return True
@@ -153,12 +216,12 @@ def images(current_dir="./", exts={"jpg", "png", "jpeg", "gif"}):
                 yield path_join(root, file_name)
 
 
-def send_report(data):
+def send_report(data, photos=None):
     """Prepare and send mail.
     """
     try:
         mail_to = os.environ.get("TO_MAIL")
-        log("Report to {} with {} records".format(
+        manager.log("Report to {} with {} records".format(
             mail_to, len(data)), "send mail")
 
         send_mail(
@@ -166,10 +229,12 @@ def send_report(data):
             password=os.environ.get("PASSWORD_MAIL"),
             send_to=mail_to,
             subject="Movement detected!",
+            files=photos,
             text="Movement detected at:\n{}".format(
                 "\n".join(map(" {}".format, data))))
     except Exception as err:
-        log(err, "send mail")
+        manager.log(err, "send mail")
+        return False
     else:
         return True
 
@@ -180,30 +245,33 @@ def monitor_move():
     last_detect = time.time()
     light_last_on = last_detect - LIGHT_ON_TIME_LIMIT - 1
     data = []
+    photos = FileList()
 
-    while state.get("active"):
+    while manager.is_active:
         try:
             value = gpio.input(SENSOR_PIN)
         except Exception as err:
-            log(err, "sensor")
+            manager.log(err, "sensor")
             value = None
 
         now_time = time.time()
 
         if value:
             data.append(datetime.now().isoformat())
-            log("Detected!", "sensor")
+            manager.log("Detected!", "sensor")
             if light_turnon():
                 light_last_on = now_time
-                make_photo()
+                photos.extend(manager.photos())
 
         if now_time - light_last_on >= LIGHT_ON_TIME_LIMIT:
             light_turnoff()
 
         if data and now_time - last_detect >= SEND_TIME_INTERVAL_LIMIT:
             last_detect = now_time
-            if send_report(data=data):
+
+            if send_report(data=data, photos=photos):
                 data.clear()
+                photos.clear()
 
         time.sleep(0.15)
 
