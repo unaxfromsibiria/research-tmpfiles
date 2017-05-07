@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
-import picamera
 import os
+import picamera
 import smtplib
 import signal
 import time
@@ -31,10 +31,12 @@ SEND_TIME_INTERVAL_LIMIT = int(
 LIGHT_ON_TIME_LIMIT = 3600 // 2
 TMP_DIR = os.environ.get("TMP_DIR") or tempfile.mkdtemp()
 IMAGE_SIZE = os.environ.get("IMAGE_SIZE") or ""
+PHOTO_SERIES = int(os.environ.get("PHOTO_SERIES") or 3)
 
 
 class FileList(list):
-
+    """List for files (photo files).
+    """
     def clear(self):
         if self:
             for file_path in self:
@@ -46,7 +48,8 @@ class FileList(list):
 
 
 class SytemManager:
-
+    """Manager of devices and processing.
+    """
     state = None
     inst_id = log_file_name = None
     _camera_conf = None
@@ -59,8 +62,9 @@ class SytemManager:
         self.log_file_name = "move-{}.log".format(code)
         print("log file: {}".format(self.log_file_name))
         self._camera_conf = {
-            "framerate": 30,
-            "resolution": (1280, 960),
+            "framerate": int(
+                os.environ.get("CAMERA_FRAMERATE") or 30),
+            "resolution": (640, 480),
         }
         try:
             w, h = map(int, IMAGE_SIZE.split(','))
@@ -71,9 +75,13 @@ class SytemManager:
 
     @property
     def is_active(self) -> bool:
+        """Check state.
+        """
         return bool(self.state.get("active"))
 
     def stop(self):
+        """Change state.
+        """
         self.log("termination...")
         self.state["active"] = False
 
@@ -91,7 +99,7 @@ class SytemManager:
         except Exception as err:
             print(err)
 
-    def photos(self, count=3) -> list:
+    def photos(self, count=PHOTO_SERIES) -> list:
         """Make photos to files.
         """
         result = []
@@ -273,9 +281,10 @@ def monitor_move():
                 data.clear()
                 photos.clear()
 
-        time.sleep(0.15)
+        time.sleep(0.2)
 
-    if data and send_report(data=data):
+    if data and send_report(data=data, photos=photos):
         data.clear()
+        photos.clear()
 
 prepare() and monitor_move()
