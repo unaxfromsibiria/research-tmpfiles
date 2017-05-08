@@ -1,4 +1,8 @@
 # Compiled Object files, Static and Dynamic libs (Shared Objects)
+*
+# binary files without extensions
+!*.*
+
 *.o
 *.a
 *.so

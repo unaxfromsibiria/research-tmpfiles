@@ -3,7 +3,9 @@ package main
 import (
 	"flag"
 	"fmt"
+	"log"
 	"net/http"
+	"time"
 
 	"github.com/pressly/chi"
 	"github.com/pressly/chi/middleware"
@@ -64,6 +66,8 @@ func mainPage(w http.ResponseWriter, request *http.Request) {
 }
 
 func calcClientData(w http.ResponseWriter, request *http.Request) {
+	// Client has a problem in the part of connections without this options.
+	w.Header().Set("Connection", "close")
 	defer request.Body.Close()
 	calcData := CalcDataRequest{}
 	if err := render.Bind(request, &calcData); err != nil {
@@ -97,5 +101,13 @@ func main() {
 	router.Get("/", mainPage)
 	router.Get("/color/:rgb", getColor)
 	router.Post("/calc/", calcClientData)
-	http.ListenAndServe(socketStr, router)
+	//http.ListenAndServe(socketStr, router)
+	server := &http.Server{
+		Addr:              socketStr,
+		ReadTimeout:       5 * time.Second,
+		WriteTimeout:      5 * time.Second,
+		ReadHeaderTimeout: 5 * time.Second,
+		IdleTimeout:       5 * time.Second,
+		Handler:           router}
+	log.Fatal(server.ListenAndServe())
 }

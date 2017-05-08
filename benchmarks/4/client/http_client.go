@@ -64,6 +64,7 @@ func connect(num int, url string, result *chan resultConn) {
 			res.requestErrorCount++
 			break
 		} else {
+			defer response.Body.Close()
 			if content, err := ioutil.ReadAll(response.Body); err != nil {
 				log.Printf("Read response body error: %s\n", err)
 				res.requestErrorCount++
@@ -74,7 +75,6 @@ func connect(num int, url string, result *chan resultConn) {
 				res.byteIn += len(content)
 				res.answerCount++
 			}
-			response.Body.Close()
 		}
 	}
 	res.time = float32(time.Since(start)) / 1E9
