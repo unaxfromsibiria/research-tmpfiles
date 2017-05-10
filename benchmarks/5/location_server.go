@@ -171,6 +171,8 @@ func main() {
 		IdleTimeout:       5 * time.Second,
 		Handler:           router}
 
-	log.Fatal(externalapi.RunExternalApiRequestPool(poolSize))
-	log.Fatal(server.ListenAndServe())
+	if err := externalapi.RunExternalApiRequestPool(poolSize); err != nil {
+		log.Fatalln(err)
+	}
+	log.Fatalln(server.ListenAndServe())
 }
