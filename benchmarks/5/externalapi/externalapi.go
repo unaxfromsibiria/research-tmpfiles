@@ -4,15 +4,26 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
 )
 
 const (
-	requestTimeout = 30
-	wrongDistance  = -1
+	requestTimeout   = 30
+	wrongDistance    = -1
+	envVarNameApiUrl = "APIURL"
 )
+
+var externalApiUrl string
+
+func init() {
+	externalApiUrl = os.Getenv(envVarNameApiUrl)
+	if externalApiUrl == "" {
+		log.Panicf("Environment variable '%s' required.\n", envVarNameApiUrl)
+	}
+}
 
 type loc struct {
 	lat, lng string
@@ -116,11 +127,13 @@ func (pool *apiCallClientPool) nextSeekValue() int {
 func (pool *apiCallClientPool) call(points *pointSet) int {
 	index := pool.nextSeekValue()
 	var res int
+	log.Printf("to worker %d points -> %s\n", index, *points)
 	pool.pool[index].toService <- *points
 
 	select {
 	case distance := <-pool.pool[index].toClient:
 		{
+			log.Printf("from worker %d d = %d points %s\n", index, distance, *points)
 			res = distance
 		}
 	case <-time.After(time.Second * (requestTimeout + 1)):

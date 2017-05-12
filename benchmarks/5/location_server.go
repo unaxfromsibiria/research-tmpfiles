@@ -128,7 +128,7 @@ func parkingForCars(w http.ResponseWriter, request *http.Request) {
 	} else {
 		// mock data
 		locations := getFreeParking()
-		res := ParkingLocationResponse{Distance: ^int(0)}
+		res := ParkingLocationResponse{Distance: int(^uint(0) / 2)}
 		var d int
 		for _, pLoc := range locations {
 			points := make([][]string, 2)
