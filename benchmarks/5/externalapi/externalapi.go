@@ -1,18 +1,23 @@
 package externalapi
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 )
 
 const (
-	requestTimeout   = 30
+	requestTimeout   = 60
 	wrongDistance    = -1
+	mimeType         = "application/json; charset=utf-8"
 	envVarNameApiUrl = "APIURL"
 )
 
@@ -59,11 +64,54 @@ type apiCallClientPool struct {
 	doneWorkers chan int
 }
 
+type externalApiRequestParams struct {
+	Points [][]string `json:"points"`
+}
+
+type externalApiResponseData struct {
+	Distance string     `json:"distance"`
+	Points   [][]string `json:"points"`
+}
+
 var apiClientPool *apiCallClientPool
 
 func callService(client *http.Client, locations ...loc) (int, error) {
-	// TODO: ;)
-	return 0, nil
+	params := externalApiRequestParams{
+		Points: make([][]string, len(locations))}
+	for index, location := range locations {
+		params.Points[index] = []string{location.lat, location.lng}
+	}
+	buf := new(bytes.Buffer)
+	if res, err := json.Marshal(params); err != nil {
+		return wrongDistance, err
+	} else {
+		buf.Write(res)
+	}
+	if response, err := client.Post(externalApiUrl, mimeType, buf); err != nil {
+		return wrongDistance, err
+	} else {
+		defer response.Body.Close()
+		code := response.StatusCode
+		if code != 200 {
+			return 0, fmt.Errorf(
+				"service in %s status: %d", externalApiUrl, code)
+		} else {
+			if content, err := ioutil.ReadAll(response.Body); err != nil {
+				return wrongDistance, err
+			} else {
+				data := externalApiResponseData{}
+				if err = json.Unmarshal(content, &data); err != nil {
+					return wrongDistance, err
+				} else {
+					if distance, err := strconv.ParseFloat(data.Distance, 32); err != nil {
+						return wrongDistance, err
+					} else {
+						return int(distance * 100.), nil
+					}
+				}
+			}
+		}
+	}
 }
 
 func clientWorker(index int, exitChan chan bool, input chan pointSet, output chan int) {

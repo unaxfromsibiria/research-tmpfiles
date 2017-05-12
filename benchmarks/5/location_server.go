@@ -121,6 +121,7 @@ func getFreeParking() []location {
 }
 
 func parkingForCars(w http.ResponseWriter, request *http.Request) {
+	//w.Header().Set("Connection", "close")
 	defer request.Body.Close()
 	req := CarLocationRequest{}
 	if err := render.Bind(request, &req); err != nil {
@@ -142,6 +143,7 @@ func parkingForCars(w http.ResponseWriter, request *http.Request) {
 				res.Distance = d
 			}
 		}
+		log.Printf("Distance found for %s: %d", req.Id, res.Distance)
 		render.Render(w, request, &res)
 	}
 }
@@ -165,10 +167,10 @@ func main() {
 
 	server := &http.Server{
 		Addr:              socketStr,
-		ReadTimeout:       5 * time.Second,
-		WriteTimeout:      5 * time.Second,
-		ReadHeaderTimeout: 5 * time.Second,
-		IdleTimeout:       5 * time.Second,
+		ReadTimeout:       60 * time.Second,
+		WriteTimeout:      60 * time.Second,
+		ReadHeaderTimeout: 60 * time.Second,
+		IdleTimeout:       60 * time.Second,
 		Handler:           router}
 
 	if err := externalapi.RunExternalApiRequestPool(poolSize); err != nil {

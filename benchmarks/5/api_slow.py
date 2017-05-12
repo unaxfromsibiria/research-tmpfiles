@@ -1,4 +1,6 @@
+import random
 import sys
+import time
 from geopy.distance import great_circle
 from sanic import Sanic
 from sanic.response import json
@@ -13,6 +15,7 @@ for param in cmd_args:
         host, port = param.split(":")
         port = int(port)
 
+fake_delay = '-fake_delay' in cmd_args
 
 app = Sanic()
 
@@ -64,6 +67,15 @@ async def find_min_distance(request):
             if d < min_dis:
                 min_dis = d
                 res_points = [point_1, point_2]
+    # fake delay
+    if fake_delay:
+        wait = float(random.randint(100, 2000)) / 1000.
+        time.sleep(wait)
+        print(
+            " -> ",
+            points,
+            " after {:.2f} distance:".format(wait),
+            min_dis)
 
     return json({
         "distance": "{0:.2f}".format(min_dis / 1000),
@@ -74,4 +86,4 @@ async def find_min_distance(request):
     })
 
 app.run(
-    host=host, port=port, debug=False, log_config=None)
+    host=host, port=port, debug=True, log_config=None)
