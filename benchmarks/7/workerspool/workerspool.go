@@ -51,9 +51,8 @@ func newLocalStat() *localStat {
 
 // Worker pool.
 type WorkerPool struct {
-	seekLock      *sync.RWMutex
+	seqLock       *sync.RWMutex
 	size          int
-	seek          int
 	sequence      uint64
 	state         uint32
 	exit          chan bool
@@ -98,14 +97,13 @@ func NewWorkerPool(size int, handler WorkerHandler, delay uint) *WorkerPool {
 	pool := WorkerPool{
 		AnswerTimeout: time.Duration(defaultTimeout),
 		//
-		seekLock: new(sync.RWMutex),
-		seek:     -1,
-		input:    make(chan msgType, pipeLength),
-		exit:     make(chan bool, size),
-		done:     make(chan int, size),
-		stat:     *newLocalStat(),
-		state:    poolStateActive,
-		size:     size}
+		seqLock: new(sync.RWMutex),
+		input:   make(chan msgType, pipeLength),
+		exit:    make(chan bool, size),
+		done:    make(chan int, size),
+		stat:    *newLocalStat(),
+		state:   poolStateActive,
+		size:    size}
 	for i := 0; i < size; i++ {
 		go worker(
 			i+1,
@@ -122,8 +120,8 @@ func NewWorkerPool(size int, handler WorkerHandler, delay uint) *WorkerPool {
 }
 
 func (pool *WorkerPool) getMsgid() uint64 {
-	pool.seekLock.Lock()
-	defer pool.seekLock.Unlock()
+	pool.seqLock.Lock()
+	defer pool.seqLock.Unlock()
 	pool.sequence++
 	return pool.sequence
 }
