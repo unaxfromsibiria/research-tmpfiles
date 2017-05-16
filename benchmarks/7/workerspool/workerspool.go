@@ -139,6 +139,7 @@ func (pool *WorkerPool) Stop() {
 		doneWorkers[wIndex] = nil
 		log.Printf("Worker %d done.\n", wIndex)
 	}
+	time.Sleep(time.Microsecond * time.Duration(minServiceDelay))
 	close(pool.done)
 	close(pool.exit)
 	close(pool.input)
