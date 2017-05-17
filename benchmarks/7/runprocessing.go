@@ -109,7 +109,7 @@ func showResult(resChan chan clientResult) {
 	log.Printf(`
 	input data size: %d
 	msg count: %d
-	avg worker time (ms): %.6f
+	avg client time (ms): %.6f
 	avg msg exec time (ms): %.6f
 	client wait (sec): %.6f
 	`,
