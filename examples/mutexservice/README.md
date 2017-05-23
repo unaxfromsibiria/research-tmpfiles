@@ -1,8 +1,11 @@
 ### About.
 
 Intended made without the dependencies.
+
 Without external connections and persistent storage.
+
 Only simple RPC for management of mutexes.
+
 Release the mutex after client disconnecting and timeout functions are supported.
 
 ### Howto run it.
