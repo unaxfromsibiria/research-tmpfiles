@@ -636,6 +636,7 @@ func (client *Client) Close() error {
 
 // NewClient - create new client
 func NewClient(host string, port int) *Client {
+	baserand.Seed(time.Now().UnixNano())
 	randBytes, _ := NewMutexId()
 	client := Client{
 		socket: fmt.Sprintf("%s:%d", host, port),
