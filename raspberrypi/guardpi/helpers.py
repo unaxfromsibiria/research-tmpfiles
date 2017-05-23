@@ -16,3 +16,11 @@ def pin_off(pin: int):
         gpio.output(pin, False)
     else:
         print("fake pin OFF: ", pin)
+
+
+def pin_send(pin: int, value: bool):
+    value = bool(value)
+    if gpio:
+        gpio.output(pin, value)
+    else:
+        print("fake pin to: ", value)

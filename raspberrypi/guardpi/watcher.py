@@ -7,7 +7,7 @@ from .const import (
     CAMERA_FRAMERATE, LIGHT_PIN, SENSOR_PIN, SIREN_PIN,
     LIGHT_AUTO_OFF)
 from .log import get_logger
-from .helpers import pin_on, pin_off
+from .helpers import pin_on, pin_off, pin_send
 
 
 class EquipmentThread(Thread):
@@ -57,119 +57,107 @@ class DeviceState(Enum):
     NOT_ACTIVE = 3
 
 
-class SirenControl(EquipmentThread):
-    """Siren control thread.
+class AutoOffDevice(EquipmentThread):
+    """Devices with state and auto off mode.
     """
-
-    _siren_sounds = False  # on / off
-    iter_delay = 0.2
-    state = None
+    state = DeviceState.OFF
+    next_state = DeviceState.ON
+    pin = 0
+    dev_active_option_name = None
+    auto_off_time = 1800
+    _last_change = 0
 
     def turn_on(self):
         """Turn on siren.
         """
-        self._siren_sounds = True
+        self.next_state = DeviceState.ON
 
     def turn_off(self):
         """Turn off siren.
         """
-        self._siren_sounds = False
+        self.next_state = DeviceState.OFF
 
-    def quiet(self):
-        """Immediately shut up siren.
+    def read_global_state(self):
+        """Check option.
         """
+        if self.dev_active_option_name is None:
+            return DeviceState.ON
+        else:
+            value = self.option.get(self.dev_active_option_name)
+            return DeviceState.ON if value else DeviceState.NOT_ACTIVE
+
+    def change_state(self) -> bool:
+        """Change state.
+        """
+        if self.state == self.next_state:
+            return False
+
         try:
-            pin_off(SIREN_PIN)
+            pin_send(self.pin, self.next_state == DeviceState.ON)
         except Exception as err:
             self.logger.error(
-                "Problem with siren pin: {}".format(err))
+                "Problem with pin {}: {}".format(self.pin, err))
         else:
-            self.state = DeviceState.OFF
+            self.state = self.next_state
+            self._last_change = time.time()
 
-    def shout(self):
-        """Turn on siren.
+    def check_timeout(self) -> bool:
+        """Check auto turn off.
         """
-        try:
-            pin_on(SIREN_PIN)
-        except Exception as err:
-            self.logger.error(
-                "Problem with siren pin: {}".format(err))
+        if self._last_change:
+            return self.auto_off_time <= time.time() - self._last_change
         else:
-            self.state = DeviceState.ON
+            return False
+
+    def action(self):
+        """Advanced action.
+        """
+        pass
+
+    def stop(self):
+        self.turn_off()
+        # wait action
+        time.time(self.iter_delay + 0.1)
+        return super().stop()
+
+    def run(self):
+        with self.is_alive():
+            global_state = self.read_global_state()
+            if global_state == DeviceState.NOT_ACTIVE:
+                self.next_state = global_state
+            elif self.check_timeout():
+                self.turn_off()
+
+            self.change_state()
+            self.action()
+            time.sleep(self.iter_delay)
+
+
+class SirenControl(AutoOffDevice):
+    """Siren control thread.
+    """
+
+    iter_delay = 0.2
+    pin = SIREN_PIN
+    dev_active_option_name = None
+    auto_off_time = 1800
 
     def action(self):
         """Sound with pauses.
         """
+        # TODO
         for _ in range(5):
-            self.shout()
+            #self.shout()
             time.sleep(0.6)
-            self.quiet()
+            #self.quiet()
             time.sleep(0.2)
 
-    def run(self):
-        while self.is_alive():
-            if self._siren_sounds:
-                if self.option.active_siren:
-                    self.action()
-                else:
-                    if self.state != DeviceState.NOT_ACTIVE:
-                        self.quiet()
-                        self.logger.warning(
-                            "Siren active changed to OFF.")
-                        self.state = DeviceState.NOT_ACTIVE
-                    self._siren_sounds = False
 
-            time.sleep(self.iter_delay)
-
-
-class LightControl(EquipmentThread):
+class LightControl(AutoOffDevice):
     """Light control thread.
     """
-
+    # TODO
     iter_delay = 2
-    state = None
-    auto_off = LIGHT_AUTO_OFF
-    _last_on = 0
-
-    def turn_on(self):
-        """Turn on siren.
-        """
-        self._last_on = time.time()
-
-    def turn_off(self):
-        """Turn off siren.
-        """
-        self._last_on = 0
-
-    def action(self):
-        """Light on/off.
-        """
-        try:
-            if self._last_on and self.state != DeviceState.ON:
-                pin_on(LIGHT_PIN)
-            else:
-                pin_off(LIGHT_PIN)
-
-        except Exception as err:
-            self.logger.error(
-                "Problem with light pin: {}".format(err))
-        else:
-            if self.state != DeviceState.NOT_ACTIVE:
-                self.state = (
-                    DeviceState.ON if self._last_on else DeviceState.OFF
-                )
-
-    def run(self):
-        while self.is_alive():
-            if self.option.active_light:
-                if self.auto_off > time.time() - self._last_on:
-                    self.turn_off()
-            else:
-                self.state = DeviceState.NOT_ACTIVE
-                self.turn_off()
-
-            self.action()
-            time.sleep(self.iter_delay)
 
 
 class MoveWatcher(EquipmentThread):
