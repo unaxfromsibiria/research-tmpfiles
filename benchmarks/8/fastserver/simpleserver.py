@@ -34,6 +34,7 @@ class EchoServerCountTraf(asyncio.Protocol):
     connection = None
     stat = None
     rand_msg_mode = '-rand_msg' in cmd_args
+    handler = None
 
     def connection_made(self, transport):
         """Prepare connection.
@@ -41,29 +42,23 @@ class EchoServerCountTraf(asyncio.Protocol):
         peername = transport.get_extra_info('peername')
         print('Connection from {}'.format(peername))
         self.connection = transport
+        self.handler = cprocessing.MsgHandler()
         global statistic
         self.stat = statistic
 
     def data_received(self, data):
         """Read/write socket.
         """
-        try:
-            message = data.decode()
-        except UnicodeDecodeError:
-            print(data)
-            message = "unknown"
-        else:
-            message = message.strip()
-
-        if message == "exit":
+        if data == b"exit":
             print("Close the client socket")
             self.connection.close()
         else:
             msg_size = len(data)
-            answer_data = cprocessing.calc_answer(message).encode()
-            self.stat["output"] += len(answer_data)
-            self.stat["input"] += msg_size
-            self.connection.write(answer_data)
+            answer_data = self.handler.parse(data)
+            if answer_data:
+                self.stat["output"] += len(answer_data)
+                self.stat["input"] += msg_size
+                self.connection.write(answer_data)
 
 
 for signame in ('SIGINT', 'SIGTERM'):
