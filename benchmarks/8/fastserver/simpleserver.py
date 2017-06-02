@@ -3,13 +3,14 @@ import functools
 import os
 import signal
 import sys
-from multiprocessing import Process
+from multiprocessing import Process, cpu_count
 from socket import SO_REUSEADDR, SOL_SOCKET, socket
+
 # needed python setup_processing.py build_ext --inplace
 from fastserver import cprocessing
 
 cmd_args = set(sys.argv[1:])
-worker_count = 4
+worker_count = cpu_count()
 host, port = '0.0.0.0', 8888
 for cmd_arg in cmd_args:
     if '--workers' in cmd_arg:
