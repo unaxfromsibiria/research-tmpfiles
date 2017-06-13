@@ -1,20 +1,27 @@
 import ujson
 
+from libc.stdlib cimport malloc, free
+from libc.string cimport memcpy
+
 
 cdef class MsgHandler:
     """Msg reader and handler.
     """
 
     cdef public:
-        bytearray msg
+        char *buffer
 
-    cdef char end_bt
+    cdef:
+        char end_bt
+        bint wait_part
+        char *tmp
+        int new_size, buffer_size, data_size
 
     def __cinit__(self):
-        self.msg = bytearray()
         self.end_bt = 10
+        self.wait_part = False
 
-    cdef bytes _processing(self):
+    cdef char* _processing(self):
         """API method. Data format (input/output):
             {
                 "a": [23, 1 ... 3],
@@ -27,11 +34,11 @@ cdef class MsgHandler:
                 "c": sum(a) / avg(b),
             }
         """
-        client_data = ujson.loads(self.msg.decode())
+        cdef dict client_data = ujson.loads(self.buffer.decode())
         cdef double sum_a = 0
         cdef double sum_b = 0
-        data_a = client_data["a"]
-        data_b = client_data["b"]
+        cdef list data_a = client_data["a"]
+        cdef list data_b = client_data["b"]
         cdef int len_a = len(data_a)
         cdef int len_b = len(data_b)
 
@@ -50,15 +57,29 @@ cdef class MsgHandler:
         }).encode() + b"\n"
 
     def parse(self, bytes data) -> bytes:
+        return self.cparse(data)
+
+    cdef char *cparse(self, char *data):
         """Method for new data.
         """
-        self.msg.extend(data)
-        result = None
-        cdef int len_d = len(self.msg)
-        cdef bint done = (len_d > 0 and self.msg[len_d - 1] == self.end_bt)
 
-        if done:
+        if self.wait_part:
+            self.buffer_size = len(self.buffer)
+            self.data_size = len(data)
+            self.new_size = sizeof(char) * (self.buffer_size + self.data_size)
+            self.tmp = <char *>malloc(self.new_size)
+            memcpy(self.tmp, self.buffer, self.buffer_size * sizeof(char))
+            memcpy(self.tmp + self.buffer_size, data, self.data_size * sizeof(char))
+            self.buffer = self.tmp
+        else:
+            self.buffer = data
+
+        cdef char *result = NULL
+        cdef int len_d = len(self.buffer)
+        self.wait_part = not(len_d > 0 and self.buffer[len_d - 1] == self.end_bt)
+
+        if not self.wait_part:
             result = self._processing()
-            self.msg.clear()
+            self.wait_part = False
 
         return result

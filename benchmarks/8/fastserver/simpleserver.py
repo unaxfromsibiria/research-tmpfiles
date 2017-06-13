@@ -3,12 +3,15 @@ import functools
 import os
 import signal
 import sys
-from multiprocessing import Process, cpu_count
+from multiprocessing import Manager, Process, cpu_count
 from socket import SO_REUSEADDR, SOL_SOCKET, socket
+
+import uvloop
 
 # needed python setup_processing.py build_ext --inplace
 from fastserver import cprocessing
 
+asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
 cmd_args = set(sys.argv[1:])
 worker_count = cpu_count()
 host, port = '0.0.0.0', 8888
@@ -36,7 +39,7 @@ def ask_exit(signal_name, index, server, loop):
     loop.stop()
 
 
-def run_server(worker_index: int, in_socket):
+def run_server(worker_index: int, in_socket, result_stat: dict):
     """Create asyncio net server worker.
     """
     stat = {"input": 0, "output": 0}
@@ -74,6 +77,8 @@ def run_server(worker_index: int, in_socket):
         def connection_lost(self, exc):
             stat["input"] += self.in_size
             stat["output"] += self.out_size
+            result_stat["input"] += self.in_size
+            result_stat["output"] += self.out_size
 
     loop = asyncio.get_event_loop()
     listen = loop.create_server(
@@ -121,8 +126,14 @@ def run_workers(workers_count: int):
         signal.signal(getattr(signal, signame), main_sig_handler)
 
     processes = []
+    manager = Manager()
+    results = manager.dict()
+    results["input"] = 0
+    results["output"] = 0
     for index in range(workers_count):
-        process = Process(target=run_server, args=(index + 1, sock))
+        process = Process(
+            target=run_server,
+            args=(index + 1, sock, results))
         process.daemon = True
         process.start()
         processes.append(process)
@@ -136,6 +147,10 @@ def run_workers(workers_count: int):
         process.terminate()
 
     sock.close()
+    print("""Total:
+        input: {input}
+        output: {output}
+        """.format(**results))
 
 
 # run workers
