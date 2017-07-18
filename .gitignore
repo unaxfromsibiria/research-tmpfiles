@@ -31,4 +31,5 @@ _testmain.go
 *.vscode*
 tmp/*
 .env
-benchmarks/9/*
+benchmarks/11/*
+benchmarks/9/*.json
