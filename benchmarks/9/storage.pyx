@@ -89,6 +89,7 @@ cdef class CellStorage:
                 self.content[new_index] = value
 
         else:
+            # first value
             self.size = 1
             self.content = <double *>malloc(sizeof(double) * self.size)
             self.content[0] = value

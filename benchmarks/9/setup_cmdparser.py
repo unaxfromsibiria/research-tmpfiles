@@ -3,7 +3,7 @@ from Cython.Build import cythonize
 
 setup(
     ext_modules=cythonize(
-        "storage.pyx",
+        "cmdparser.pyx",
         compiler_directives={
             "initializedcheck": False,
             "nonecheck": False,
