@@ -28,7 +28,7 @@ cdef class CellStorage:
     cdef _search_near(self, double value):
         # search near element from array by value
         cdef int size = self.size
-        cdef double dt_value, cur_value, new_dt_value, result = 0
+        cdef double dt_value = 0, cur_value = 0, new_dt_value = 0, result = 0
         cdef int m_index = int(size / 2)
         cdef bint to_low = size > 0
         cdef bint first_time = True
@@ -53,7 +53,7 @@ cdef class CellStorage:
                         m_index = m_index - int(size / 2)
                     else:
                         m_index = m_index + int(size / 2)
-        
+
         return result
 
     cdef int _search_insert_index(self, double value):
@@ -68,9 +68,17 @@ cdef class CellStorage:
 
         return result
 
+    cdef double _sum(self):
+        # calc sum
+        cdef double result = 0
+        if self.size > 0:
+            for i in range(self.size):
+                result += self.content[i]
+        return result
+
     cdef _insert(self, double value):
         # insert value to needed cell
-        cdef int new_index, index = 0
+        cdef int new_index = 0, index = 0
         if self.size > 0:
             self.size += 1
             self.content = <double *>realloc(self.content, sizeof(double) * self.size)
@@ -94,6 +102,25 @@ cdef class CellStorage:
             self.content = <double *>malloc(sizeof(double) * self.size)
             self.content[0] = value
 
+    cdef double _search_variant(self, list data):
+        # search value with min dt value
+        cdef double dt_value = -1, new_dt_value = 0, val = 0
+        cdef double result = 0, x = 0
+        for el in data:
+            x = el
+            val = self._search_near(x)
+            new_dt_value = _simple_abs(val - x)
+
+            if dt_value >= 0:
+                if new_dt_value < dt_value:
+                    dt_value = new_dt_value
+                    result = val
+            else:
+                dt_value = new_dt_value
+                result = val
+
+        return result
+
     def insert(self, float value):
         """Insert the value with safety of the sorting.
         """
@@ -104,10 +131,20 @@ cdef class CellStorage:
         """
         return [self.content[i] for i in range(self.size)]
 
+    def sum(self) -> float:
+        """Calc sum.
+        """
+        return self._sum()
+
     def search(self, float value) -> float:
         """Search an element of array is most closely to the value.
         """
         return self._search_near(value)
+
+    def search_variant(self, list data) -> float:
+        """Search in many values.
+        """
+        return self._search_variant(data)
 
     def extend(self, list values):
         """Insert new values.

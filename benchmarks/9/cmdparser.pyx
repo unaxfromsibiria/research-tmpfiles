@@ -150,7 +150,12 @@ cdef class CmdParser:
     def get_bytes(self) -> bytes:
         """Get the bytes of current message.
         """
-        return self.get_str().encode()
+        if self._size > 0:
+            return bytes((
+                self._data[i] for i in range(self._size - 1)
+            ))
+        else:
+            return b""
 
     def get_line(self) -> str:
         """Join the string.
