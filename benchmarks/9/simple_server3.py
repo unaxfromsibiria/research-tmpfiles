@@ -118,48 +118,57 @@ class DataStorage:
         code = None
         result = None
         min_dt = None
-        for index, val in enumerate(items):
-            if index == 0 or not val:
+        for index, value in enumerate(items):
+            if index == 0 or not value:
                 continue
-
             if index == 1:
-                code = val
+                code = value
             elif code:
-                value = 0
-                dt_value = None
-                val = float(val)
+                value = float(value)
                 data = self.data.get(code)
                 if not data:
                     break
 
+                size = orig_size = len(data)
+                val = 0
+                dt_value = None
+
                 # binary search
-                m_index = len(data) // 2
-                to_low = True
-                while to_low:
-                    cur_value = data[m_index]
-                    if dt_value is None:
-                        dt_value = abs(cur_value - val) + 1
+                m_index = size // 2
+                while size > 1:
+                    val = data[m_index]
+                    size = size // 2
+                    h_size = (size // 2) or 1
+                    if val > value and size > 0 and m_index > 0:
+                        m_index = m_index - h_size
+                    elif m_index < orig_size - 1:
+                        m_index = m_index + h_size
 
-                    new_dt_value = abs(cur_value - val)
-                    to_low = new_dt_value < dt_value
-                    if to_low:
-                        value = cur_value
-                        if cur_value > val:
-                            data = data[:m_index]
-                        else:
-                            data = data[m_index:]
-                        m_index = len(data) // 2
+                iter_result = data[m_index]
+                dt_value = abs(iter_result - value)
 
-                        to_low = len(data) > 1
+                if m_index > 0:
+                    val = data[m_index - 1]
+                    new_dt_value = abs(val - value)
+                    if dt_value > new_dt_value:
+                        iter_result = val
+                        dt_value = new_dt_value
 
-                new_min_dt = abs(value - val)
+                if m_index < orig_size - 1:
+                    val = data[m_index + 1]
+                    new_dt_value = abs(val - value)
+                    if dt_value > new_dt_value:
+                        iter_result = val
+                        dt_value = new_dt_value
+
+                new_min_dt = dt_value
                 if result:
                     if min_dt > new_min_dt:
                         min_dt = new_min_dt
-                        result = value
+                        result = iter_result
                 else:
                     min_dt = new_min_dt
-                    result = value
+                    result = iter_result
 
         return code, result
 

@@ -28,31 +28,37 @@ cdef class CellStorage:
     cdef _search_near(self, double value):
         # search near element from array by value
         cdef int size = self.size
-        cdef double dt_value = 0, cur_value = 0, new_dt_value = 0, result = 0
+        cdef int half_size = 0
+        cdef double dt_value = 0, val = 0, new_dt_value = 0, result = 0
         cdef int m_index = int(size / 2)
-        cdef bint to_low = size > 0
-        cdef bint first_time = True
 
-        while to_low:
-            cur_value = self.content[m_index]
-            if first_time:
-                result = cur_value
-                dt_value = _simple_abs(cur_value - value) + 1
-                first_time = False
-            else:
+        while size > 1:
+            val = self.content[m_index]
+            size = int(size / 2)
+            half_size = int(size / 2)
+            if half_size < 0:
+                half_size = 0
+            if val > value and size > 0 and m_index > 0:
+                m_index = m_index - half_size
+            elif m_index < self.size - 1:
+                m_index = m_index - half_size
+
+        result = self.content[m_index]
+        dt_value = _simple_abs(result - value)
+
+        if m_index > 0:
+            val = self.content[m_index - 1]
+            new_dt_value = _simple_abs(val - value)
+            if dt_value > new_dt_value:
+                result = val
                 dt_value = new_dt_value
 
-            new_dt_value = _simple_abs(cur_value - value)
-            to_low = new_dt_value < dt_value
-            if to_low:
-                result = cur_value
-                size = int(size / 2)
-                to_low = size > 1
-                if to_low:
-                    if cur_value > value:
-                        m_index = m_index - int(size / 2)
-                    else:
-                        m_index = m_index + int(size / 2)
+        if m_index < self.size - 1:
+            val = self.content[m_index + 1]
+            new_dt_value = _simple_abs(val - value)
+            if dt_value > new_dt_value:
+                result = val
+                dt_value = new_dt_value
 
         return result
 

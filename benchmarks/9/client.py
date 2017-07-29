@@ -91,6 +91,7 @@ async def tcp_client(
         start_time = time.time()
         reader, writer = await asyncio.open_connection(host, port, loop=ev_loop)
         start_time = time.time()
+        request_count = 0
         for line in commands:
             writer.write(line)
             data = await reader.readline()
@@ -132,12 +133,14 @@ elif cmd_args.data and cmd_args.server:
         asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
 
     workers = cmd_args.connections
-    chunk_size = len(data) // workers
+    n = len(data)
+    chunk_size = n // workers
     server = cmd_args.server.split(":")
     server = server[0], int(server[1])
     loop = asyncio.get_event_loop()
     statistic = {"time": .0, "error": 0}
     try:
+        start_time = time.time()
         loop.run_until_complete(
             asyncio.gather(*(
                 tcp_client(
@@ -149,11 +152,14 @@ elif cmd_args.data and cmd_args.server:
                 for index in range(workers)
             ))
         )
+        exec_time = time.time() - start_time
         loop.close()
     finally:
         statistic["time"] = statistic["time"] / workers * 1000
+        statistic["rps"] = int(n / exec_time)
         result_msg = (
-            "Avg command: {time:0.6f} ms errors: {error}".format(**statistic))
+            "Avg command: {time:0.6f} ms rps: ~{rps:0.6f} "
+            "errors: {error}").format(**statistic)
         del statistic["time"]
         del statistic["error"]
         for code in sorted(statistic.keys()):

@@ -77,33 +77,47 @@ func (storage *serverStorage) read(code string, values []floatCell) floatCell {
 	var result floatCell
 	if origData, ok := storage.data[code]; ok {
 		size := len(origData)
-		var toLow, firstIndex bool
+		origSize := len(origData)
 		var curValue, dtValue, newDtValue, value, newMinDt, minDt floatCell
+		var halfSize int
 		for _, val := range values {
-			toLow = true
-			value = 0
-			data := origData
+			size = origSize
 			mIndex := int(size / 2)
-			firstIndex = true
-			for toLow {
-				curValue = data[mIndex]
-				if firstIndex {
-					dtValue = floatCell(math.Abs(float64(curValue-val)) + 1)
-					firstIndex = false
+			for size > 1 {
+				curValue = origData[mIndex]
+				size = int(size / 2)
+				halfSize = int(size / 2)
+				if halfSize < 1 {
+					halfSize = 1
 				}
-				newDtValue = floatCell(math.Abs(float64(curValue - val)))
-				toLow = newDtValue < dtValue
-				if toLow {
-					value = curValue
-					if curValue > val {
-						data = data[:mIndex]
-					} else {
-						data = data[mIndex:]
-					}
-					mIndex = int(len(data) / 2)
-					toLow = len(data) > 1
+				if curValue > val && size > 0 && mIndex > 0 {
+					mIndex = mIndex - halfSize
+				} else if mIndex < halfSize-1 {
+					mIndex = mIndex + halfSize
 				}
 			}
+
+			value = origData[mIndex]
+			dtValue = floatCell(math.Abs(float64(value - val)))
+
+			if mIndex > 0 {
+				curValue = origData[mIndex-1]
+				newDtValue = floatCell(math.Abs(float64(curValue - val)))
+				if dtValue > newDtValue {
+					value = curValue
+					dtValue = newDtValue
+				}
+			}
+
+			if mIndex < origSize-1 {
+				curValue = origData[mIndex+1]
+				newDtValue = floatCell(math.Abs(float64(curValue - val)))
+				if dtValue > newDtValue {
+					value = curValue
+					dtValue = newDtValue
+				}
+			}
+
 			newMinDt = floatCell(math.Abs(float64(value - val)))
 			if result > 0 {
 				if minDt > newMinDt {
