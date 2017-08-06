@@ -8,6 +8,7 @@ cmd_args = set(sys.argv[1:])
 
 if "-uvloop" in cmd_args:
     import uvloop
+    print("Used uvloop.")
     asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
 
 
@@ -31,6 +32,7 @@ async def calc_handler(request):
 
 def run(*args, **kwargs):
     """Run server method.
+    python -m aiohttp.web -H 0.0.0.0 -P 8888 http_server:run
     """
     app = web.Application()
     app.router.add_get('/', main_page)

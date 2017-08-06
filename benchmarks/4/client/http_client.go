@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -15,7 +16,8 @@ import (
 )
 
 const (
-	mimeType = "application/json; charset=utf-8"
+	mimeType              = "application/json; charset=utf-8"
+	requestDefaultTimeout = 15 * time.Second
 )
 
 var serverURL string
@@ -46,10 +48,17 @@ func connect(num int, url string, result *chan resultConn) {
 	fmt.Println("Start connection ", num)
 	start := time.Now()
 	res := resultConn{}
-	//transport := http.Transport(*http.DefaultTransport.(*http.Transport))
+	transport := &http.Transport{
+		Proxy: http.ProxyFromEnvironment,
+		Dial: (&net.Dialer{
+			Timeout:   requestDefaultTimeout,
+			KeepAlive: 0,
+		}).Dial,
+		TLSHandshakeTimeout: requestDefaultTimeout,
+	}
 	client := http.Client{
-		//Transport: &transport,
-		Timeout: time.Duration(requestTimeout) * time.Second}
+		Transport: transport,
+		Timeout:   time.Duration(requestTimeout) * time.Second}
 
 	for i := 0; i < messageCount; i++ {
 		msg := datast.RandSimpleJSONMsgAsBuffer()
