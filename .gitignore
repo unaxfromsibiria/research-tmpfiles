@@ -33,3 +33,6 @@ tmp/*
 .env
 benchmarks/11/*
 benchmarks/9/*.json
+benchmarks/12/*.jpg
+benchmarks/12/*.png
+benchmarks/12/*.c
