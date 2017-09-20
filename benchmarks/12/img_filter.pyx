@@ -8,15 +8,14 @@ from libc.stdlib cimport malloc, free, realloc
 cdef enum:
     _layers_count = 3
     _locality_size = 5
-    _default_difference = 64
+    _default_difference = 48
 
 
-cdef char _max_difference(char *data, int w, int h, int x, int y) nogil:
+cdef bint _max_difference(int *data, int w, int h, int x, int y) nogil:
     # max - min value in cube
-    cdef int i, j, s
+    cdef int i, j, val, max_v = 0, min_v = 255
     cdef int ax = x - _locality_size, bx = x + _locality_size
     cdef int ay = y - _locality_size, by = y + _locality_size
-    cdef char max_v = 255, min_v = 0
 
     if ax < 0:
         ax = 0
@@ -29,23 +28,24 @@ cdef char _max_difference(char *data, int w, int h, int x, int y) nogil:
 
     for i in range(ay, by):
         for j in range(ax, bx):
+            val = data[i * w + j]
             # get min/max
-            s = i * w + j
-            if min_v > data[s]:
-                min_v = data[s]
-            elif max_v < data[s]:
-                max_v = data[s]
+            if min_v > val:
+                min_v = val
+            # goto here in C if use "elif"
+            if max_v < val:
+                max_v = val
 
     return max_v - min_v
 
-cdef void _extract_contour(char difference, char *data, char *layer, int w, int h) nogil:
+cdef void _extract_contour(int difference, int *data, bint *layer, int w, int h) nogil:
     # create layer
     cdef int i, j
 
     for i in range(h):
         for j in range(w):
             if _max_difference(data, w, h, j, i) > difference:
-                layer[i * w + j] = 1
+                layer[i * w + j] = True
 
 cdef class ContourExtractor:
     # extract contours
@@ -53,29 +53,31 @@ cdef class ContourExtractor:
     cdef:
         int w, h
         int _significant_difference
-        char *content_r
-        char *content_g
-        char *content_b
-        char *layer_r
-        char *layer_g
-        char *layer_b
+        int *content_r
+        int *content_g
+        int *content_b
+        bint *layer_r
+        bint *layer_g
+        bint *layer_b
 
     cdef _init(self, img: object):
         # create layers
         cdef int size = 0, i = 0, r, g, b
         self.w, self.h = img.size
         size = self.w * self.h
-        self.content_r = <char *>malloc(sizeof(char) * size)
-        self.content_g = <char *>malloc(sizeof(char) * size)
-        self.content_b = <char *>malloc(sizeof(char) * size)
-        self.layer_r = <char *>malloc(sizeof(char) * size)
-        self.layer_g = <char *>malloc(sizeof(char) * size)
-        self.layer_b = <char *>malloc(sizeof(char) * size)
+        self.content_r = <int *>malloc(sizeof(int) * size)
+        self.content_g = <int *>malloc(sizeof(int) * size)
+        self.content_b = <int *>malloc(sizeof(int) * size)
+        self.layer_r = <bint *>malloc(sizeof(bint) * size)
+        self.layer_g = <bint *>malloc(sizeof(bint) * size)
+        self.layer_b = <bint *>malloc(sizeof(bint) * size)
 
         # fill 3 layers by color
         for r, g, b in img.getdata():
-            self.content_r[i], self.content_g[i], self.content_b[i] = r, g, b
-            self.layer_r[i] = self.layer_g[i] = self.layer_b[i] = 0
+            self.content_r[i] = r
+            self.content_g[i] = g
+            self.content_b[i] = b
+            self.layer_r[i] = self.layer_g[i] = self.layer_b[i] = False
             i += 1
 
     def __init__(self, img_path: str, significant_difference: int=_default_difference):
@@ -106,15 +108,13 @@ cdef class ContourExtractor:
     def clear(self):
         pass
 
-    cdef _layer_to_array(self, char *layer):
-        cdef int i, j, s, v
+    cdef _layer_to_array(self, bint *layer):
+        cdef int i, j
         data = np.zeros((self.h, self.w, 3), dtype=np.uint8)
         for i in range(self.h):
             for j in range(self.w):
-                v = 0
-                if layer[i * self.w + j] > 0:
-                    v = 255
-                data[i, j, 0] = data[i, j, 1] = data[i, j, 2] = v
+                if layer[i * self.w + j]:
+                    data[i, j, 0] = data[i, j, 1] = data[i, j, 2] = 255
 
         return data
 

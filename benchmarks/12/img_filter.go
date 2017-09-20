@@ -2,17 +2,20 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"image"
 	"image/jpeg"
+	"image/png"
 	"log"
 	"os"
+	"path"
 	"time"
 )
 
 const (
 	LayersCount       = 3
 	localitySize      = 5
-	defaultDifference = 64
+	defaultDifference = 48
 )
 
 var imgPath string
@@ -32,15 +35,14 @@ func init() {
 	flag.Parse()
 }
 
-func maxDifference(dataPtr *[][]uint8, w, h, x, y int) uint8 {
+func maxDifference(data [][]uint8, w, h, x, y int) uint8 {
 	var i, j int
 	ax := x - localitySize
 	bx := x + localitySize
 	ay := y - localitySize
 	by := y + localitySize
-	var maxV uint8 = 255
-	var minV uint8
-	data := *dataPtr
+	var maxV uint8
+	var minV uint8 = 255
 	if ax < 0 {
 		ax = 0
 	}
@@ -58,7 +60,8 @@ func maxDifference(dataPtr *[][]uint8, w, h, x, y int) uint8 {
 		for j = ay; j < by; j++ {
 			if minV > data[i][j] {
 				minV = data[i][j]
-			} else if maxV < data[i][j] {
+			}
+			if maxV < data[i][j] {
 				maxV = data[i][j]
 			}
 		}
@@ -66,12 +69,12 @@ func maxDifference(dataPtr *[][]uint8, w, h, x, y int) uint8 {
 	return maxV - minV
 }
 
-func searchCounter(w, h int, data, layer *[][]uint8, result chan bool) {
+func searchCounter(w, h int, data, layer [][]uint8, result chan bool) {
 	var i, j int
 	for i = 0; i < w; i++ {
 		for j = 0; j < h; j++ {
 			if maxDifference(data, w, h, i, j) > defaultDifference {
-				(*layer)[i][j] = 1
+				layer[i][j] = 255
 			}
 		}
 	}
@@ -80,9 +83,9 @@ func searchCounter(w, h int, data, layer *[][]uint8, result chan bool) {
 
 func (layers *LayerFilter) apply() {
 	done := make(chan bool, LayersCount)
-	go searchCounter(layers.w, layers.h, &(layers.contentR), &(layers.layerR), done)
-	go searchCounter(layers.w, layers.h, &(layers.contentG), &(layers.layerG), done)
-	go searchCounter(layers.w, layers.h, &(layers.contentB), &(layers.layerB), done)
+	go searchCounter(layers.w, layers.h, layers.contentR, layers.layerR, done)
+	go searchCounter(layers.w, layers.h, layers.contentG, layers.layerG, done)
+	go searchCounter(layers.w, layers.h, layers.contentB, layers.layerB, done)
 	doneCount := 0
 	for res := range done {
 		if res {
@@ -91,6 +94,63 @@ func (layers *LayerFilter) apply() {
 		if doneCount >= LayersCount {
 			break
 		}
+	}
+}
+
+func (layer *LayerFilter) saveR(path string) {
+	pixels := make([]byte, layer.w*layer.h)
+	img := image.NewGray(image.Rect(0, 0, layer.w, layer.h))
+	i, j, s := 0, 0, 0
+	for i = 0; i < layer.h; i++ {
+		for j = 0; j < layer.w; j++ {
+			pixels[s] = layer.layerR[j][i]
+			s++
+		}
+	}
+	img.Pix = pixels
+	if resultImg, err := os.Create(path); err != nil {
+		log.Fatalln(err)
+	} else {
+		defer resultImg.Close()
+		png.Encode(resultImg, img)
+	}
+}
+
+func (layer *LayerFilter) saveG(path string) {
+	pixels := make([]byte, layer.w*layer.h)
+	img := image.NewGray(image.Rect(0, 0, layer.w, layer.h))
+	i, j, s := 0, 0, 0
+	for i = 0; i < layer.h; i++ {
+		for j = 0; j < layer.w; j++ {
+			pixels[s] = layer.layerG[j][i]
+			s++
+		}
+	}
+	img.Pix = pixels
+	if resultImg, err := os.Create(path); err != nil {
+		log.Fatalln(err)
+	} else {
+		defer resultImg.Close()
+		png.Encode(resultImg, img)
+	}
+}
+
+func (layer *LayerFilter) saveB(path string) {
+	pixels := make([]byte, layer.w*layer.h)
+	img := image.NewGray(image.Rect(0, 0, layer.w, layer.h))
+	i, j, s := 0, 0, 0
+	for i = 0; i < layer.h; i++ {
+		for j = 0; j < layer.w; j++ {
+			pixels[s] = layer.layerB[j][i]
+			s++
+		}
+	}
+	img.Pix = pixels
+	if resultImg, err := os.Create(path); err != nil {
+		log.Fatalln(err)
+	} else {
+		defer resultImg.Close()
+		png.Encode(resultImg, img)
 	}
 }
 
@@ -112,7 +172,7 @@ func initLayers(img image.Image, start time.Time) *LayerFilter {
 		lineB := make([]uint8, h)
 		for j := 0; j < h; j++ {
 			r, g, b, _ := img.At(i, j).RGBA()
-			lineR[j], lineG[j], lineB[j] = uint8(r), uint8(g), uint8(b)
+			lineR[j], lineG[j], lineB[j] = uint8(r>>8), uint8(g>>8), uint8(b>>8)
 		}
 		layers.contentR[i] = lineR
 		layers.contentG[i] = lineG
@@ -142,5 +202,9 @@ func main() {
 		doneTime := time.Now()
 		execTime := doneTime.Sub(start)
 		log.Println("Apply time: ", execTime)
+		fileName := path.Base(imgPath)
+		layers.saveR(fmt.Sprintf("%s_r.png", fileName))
+		layers.saveG(fmt.Sprintf("%s_g.png", fileName))
+		layers.saveB(fmt.Sprintf("%s_b.png", fileName))
 	}
 }
