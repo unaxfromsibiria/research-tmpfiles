@@ -45,73 +45,55 @@ Install the docker by this document https://www.raspberrypi.org/blog/docker-come
     OS/Arch:      linux/arm
     Experimental: false
 
-### 4) Strange network configuration.
+### 4) Quite simple network configuration.
 
-Change for managed=true in /etc/NetworkManager/NetworkManager.conf
+Make sure that option is managed=false in /etc/NetworkManager/NetworkManager.conf
 
-My internet provider connect through eth0.
+My internet provider connection through eth0 with MAC from my old wi-fi router.
 
 Look at my /etc/network/interfaces
 
     allow-hotplug eth0
-    no-auto-down eth0
-    iface eth0 inet dhcp
-        hwaddress ether ff:ff:ff:ff:ff:ff
-        up sleep 5
-        up ifconfig wlan0 inet 10.1.1.1 netmask 255.255.255.0
-
-    iface wlan0 inet manual
+    iface eth0 inet manual
+        hwaddress ether 00:40:f4:b1:c3:94
 
     auto lo
     iface lo inet loopback
 
-    iface docker0 inet manual
-
-Yes, it is unexpected usecase. Only this options allow to network apply this ip in wlan0 after reboot.
-
-My congratulations to you if simple static configuration allow you to have ip after reboot.
-
-Another variation of configuration is creation of alias section for wlan0 in /etc/dhcp/dhclient.conf.
+Write nothing about wlan0 docker0.
 
 ### 5) Soft for wifi-router.
+
+At first you should to remove dhcp clients:
+
+`aptitude remove isc-dhcp-client isc-dhcp-common udhcpd`
 
 Install this:
 
 `aptitude install dnsmasq hostapd dhcpd dhcpcd5`
 
-Change /etc/dhcpcd.conf append line with `denyinterface wlan0`
+We will create settings of local wi-fi network in /etc/dhcpcd.conf
+ 
+    interface wlan0
+        static ip_address=10.1.1.1/24
 
 Edit /etc/hostapd/hostapd.conf as:
 
     interface=wlan0
-
     driver=nl80211
-
-    ssid=access-point-name
-
+    ssid=name
     hw_mode=g
-
-    channel=6
-
+    channel=2
     ieee80211n=1
-
-    wmm_enabled=1
-
-    ht_capab=[HT40]
-
+    wmm_enabled=0
     macaddr_acl=0
-
     auth_algs=1
-
     ignore_broadcast_ssid=0
-
     wpa=2
-
     wpa_key_mgmt=WPA-PSK
-
-    wpa_passphrase=goodpassword
-
+    wpa_passphrase=access password!
     rsn_pairwise=CCMP
+    wpa_pairwise=TKIP
 
 In /etc/default/hostapd change value of DAEMON_CONF to this `DAEMON_CONF="/etc/hostapd/hostapd.conf"`
 
@@ -119,10 +101,7 @@ Edit this configuration /etc/dnsmasq.conf:
 
     interface=wlan0
     listen-address=10.1.1.1
-    bind-interfaces
     server=8.8.8.8
-    domain-needed
-    bogus-priv
     dhcp-range=10.1.1.100,10.1.1.250,12h
 
 Disable those services:
@@ -150,7 +129,7 @@ Create script `touch /usr/bin/restart-access-point.sh && chmod 750 /usr/bin/rest
 with this content:
 
     #!/bin/bash
-    sleep 20 && service dhcpcd restart && service hostapd restart && service dnsmasq restart
+    sleep 15 && service dhcpcd restart && service hostapd restart && service dnsmasq restart
 
 And edit /etc/rc.local:
 
