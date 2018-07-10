@@ -41,7 +41,6 @@ cdef bint _max_difference(int *data, int w, int h, int x, int y) nogil:
 cdef void _extract_contour(int difference, int *data, bint *layer, int w, int h) nogil:
     # create layer
     cdef int i, j
-
     for i in range(h):
         for j in range(w):
             if _max_difference(data, w, h, j, i) > difference:
@@ -71,7 +70,6 @@ cdef class ContourExtractor:
         self.layer_r = <bint *>malloc(sizeof(bint) * size)
         self.layer_g = <bint *>malloc(sizeof(bint) * size)
         self.layer_b = <bint *>malloc(sizeof(bint) * size)
-
         # fill 3 layers by color
         for r, g, b in img.getdata():
             self.content_r[i] = r
@@ -110,6 +108,7 @@ cdef class ContourExtractor:
 
     cdef _layer_to_array(self, bint *layer):
         cdef int i, j
+
         data = np.zeros((self.h, self.w, 3), dtype=np.uint8)
         for i in range(self.h):
             for j in range(self.w):

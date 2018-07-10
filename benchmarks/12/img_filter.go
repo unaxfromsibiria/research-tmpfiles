@@ -202,9 +202,14 @@ func main() {
 		doneTime := time.Now()
 		execTime := doneTime.Sub(start)
 		log.Println("Apply time: ", execTime)
+
+		start = time.Now()
 		fileName := path.Base(imgPath)
 		layers.saveR(fmt.Sprintf("%s_r.png", fileName))
 		layers.saveG(fmt.Sprintf("%s_g.png", fileName))
 		layers.saveB(fmt.Sprintf("%s_b.png", fileName))
+		doneTime = time.Now()
+		execTime = doneTime.Sub(start)
+		log.Println("Save time: ", execTime)
 	}
 }
