@@ -36,6 +36,6 @@ ENTRYPOINT /bin/tunproxy_run.sh
 # docker container stop tunproxy_server
 # docker container rm tunproxy_server
 # 6) Setup this server into your vps:
-# docker run --restart=always -d -p 8080:22 --name tunproxy_server tunproxy
+# docker run --restart=always -d -p <public ssh port>:22 --name tunproxy_server tunproxy
 # and put in autoload:
-# ssh -p 8080 -N -L 3128:127.0.0.1:3128 tunuser@127.0.0.1 -N
+# ssh -p <public ssh port> -N -L 3128:127.0.0.1:3128 tunuser@127.0.0.1 -N

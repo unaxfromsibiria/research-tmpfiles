@@ -1,0 +1,15 @@
+version: "3.0"
+
+services:
+
+  tunproxyclient:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVER: <server ip>
+        PUB_SSH_PORT: <public ssh port>        
+    restart: always
+    hostname: client
+    ports:
+      - 4128:4128
