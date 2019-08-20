@@ -55,10 +55,6 @@ def get_minutes_temp_data(
     return minute_result
 
 
-def get_day_index(item: pd.Timestamp) -> pd.Timestamp:
-    return item.date()
-
-
 def create_chart_data(
     minute_temp: pd.DataFrame,
     time_window_minutes: int = 60 * 19  # 12-24 h
@@ -75,14 +71,21 @@ def create_chart_data(
 
     new_index = minute_temp.index.to_frame()
     new_index.columns = ["timeline"]
-    new_index.insert(0, "day_dt", minute_temp.index.map(get_day_index))
+    new_index.insert(0, "day_dt", minute_temp.index.map(pd.Timestamp.date))  # noqa
     minute_temp.index = pd.MultiIndex.from_frame(new_index)
-    in_day_temp = minute_temp.groupby("day_dt").mean()
+    group_data = minute_temp.copy()
+    del group_data["temp"]
+    group_data = group_data.groupby("day_dt")
+    in_day_temp = group_data.mean()
+    min_day_temp = group_data.min()
+    min_day_temp.columns = ["approx_temp"]
     day_temp = minute_temp.index.get_level_values(0).map(
         in_day_temp.clear_temp
     )
     minute_temp.insert(0, "clear_day_temp", day_temp)
     minute_temp.index = minute_temp.index.droplevel(0)
+    minute_temp = minute_temp.join(min_day_temp)
+    minute_temp.approx_temp.interpolate(method="polynomial", order=3, inplace=True)  # noqa
     return minute_temp
 
 
