@@ -125,7 +125,7 @@ def angle_calc(x0, y0, x1, y1, x2, y2) -> float:
 
 
 def triangle_sq(x0, y0, x1, y1, x2, y2) -> float:
-    """Perimeter or triangle.
+    """Area of triangle.
     """
     return (
         point_distance(x0, y0, x1, y1) *

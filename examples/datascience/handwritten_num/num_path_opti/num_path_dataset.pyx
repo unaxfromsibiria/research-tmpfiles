@@ -38,7 +38,7 @@ cdef float _angle_calc(int x0, int y0, int x1, int y1, int x2, int y2):
 
 
 cdef float _triangle_sq(int x0, int y0, int x1, int y1, int x2, int y2):
-    """Perimeter or triangle.
+    """Area of triangle.
     """
     return (
         _point_distance(x0, y0, x1, y1) *
