@@ -6,7 +6,14 @@ import pandas as pd
 
 from PIL import Image
 
-from num_path_base.num_path_dataset import find_angle_features, prepare_image
+try:
+    from num_path_opti.num_path_dataset import find_angle_features
+except ImportError as err:
+    print("Not available cython implementation:", err)
+    from num_path_base.num_path_dataset import find_angle_features
+    from num_path_base.num_path_dataset import prepare_image
+else:
+    from num_path_opti.num_path_dataset import prepare_image
 
 
 def numbers_data_files(base_dir: str) -> Iterable:
