@@ -2,6 +2,9 @@
 # 1) Build methods as shared object library (handwritten_num/num_path_opti/num_path_dataset.cpython-<arch>.so):
 #   cd handwritten_num/num_path_opti/
 #   python setup_num_path_dataset.py build_ext --inplace
+#   
+# This code tested in python 3.7.4 with cython 0.29.14.
+#
 # 2) Enjoy.
 
 import itertools
@@ -12,7 +15,6 @@ from scipy.ndimage.filters import gaussian_filter
 cdef int SPACE_SIZE = 64
 cdef float LIGHTNESS_LIMIT = 0.35
 cdef int MIN_SIZE_VALUE = 3
-
 
 
 cdef float _point_distance(int x1, int y1, int x2, int y2):
@@ -81,18 +83,37 @@ cdef object _find_content_rect(object img):
 cdef list _line_eq(int x1, int y1, int x2, int y2):
     """Equation of the line.
     """
-    cdef float k_b = x2 - x1
-    if k_b == 0:
-        k_b = 1
-    cdef float k = (y2 - y1) / k_b
-    cdef int a = min(x1, x2)
-    cdef int w = max(x1, x2) - a
-    cdef int x, val, i
+    cdef i = 0, a, w, x, y
+    cdef float k, a_dx, a_dy, dx = float(x2 - x1), dy = float(y2 - y1)
     result = []
-    for i in range(w):
-        x = a + i
-        val = int(0.5 + ((x - x1) * k + y1))
-        result.append((x, val))
+    # abs
+    a_dx = abs(dx)
+    a_dy = abs(dy)
+    if a_dx > a_dy:
+        k = dy / dx
+        if x1 < x2:
+            a = x1
+            w = x2 - a
+        else:
+            a = x2
+            w = x1 - a
+
+        for i in range(w):
+            x = a + i
+            result.append((x, int(round((x - x1) * k + y1))))
+
+    elif a_dy > 0:
+        k = dx / dy
+        if y1 < y2:
+            a = y1
+            w = y2 - a
+        else:
+            a = y2
+            w = y1 - a
+
+        for i in range(w):
+            y = a + i
+            result.append((int(round((y - y1) * k + x1)), y))
 
     return result
 
@@ -140,8 +161,7 @@ cdef _next_path_step(
     """Bypass points with maximization of area of triangles.
     Triangles created by lines of current step and previous.
     """
-    cdef int p0, x1, y1, p1, x2, y2
-    cdef int new_p, x3, y3
+    cdef int p0, x1, y1, p1, x2, y2, new_p, x3, y3
     cdef float next_sq, sq
     cdef int next_point_p = 0, next_point_x = 0, next_point_y = 0
     cdef bint next_point
@@ -201,7 +221,7 @@ cdef object _find_angle_features(
 ):
     """ Cython based method 'find_angle_features'.
     """
-    cdef int w, h, step_half, i, p_i, p_j, x, y, n
+    cdef int w, h, step_half, i, p_i, p_j, x, y, n, center_x, center_y
     cdef float direc, val, cur_direc, distance
     cdef int index, index1, x1, y1, index2, x2, y2, index3, x3, y3
     cdef int p_index1, p_index2
@@ -209,6 +229,8 @@ cdef object _find_angle_features(
     cdef float estimation_distance_incenter
 
     w, h = img.shape
+    center_x = w // 2
+    center_y = h // 2
     points = {}
     lines = {}
     step_half = step // 2
@@ -242,19 +264,19 @@ cdef object _find_angle_features(
         for j in range(n):
             x2, y2 = path_points[j]
             line = _line_eq(x1, y1, x2, y2)
-            distance = np.sqrt(
-                (y1 - y2) ** 2 + (x1 - x2) ** 2
-            )
-            if len(line) > 2 and all(img[x, y] > 0 for x, y in line):
+            distance = np.sqrt((y1 - y2) ** 2 + (x1 - x2) ** 2)
+            if len(line) > 0 and all(img[x, y] > 0 for x, y in line):
                 # direct
-                lines[x1, y1, x2, y2] = line
+                lines[x1, y1, x2, y2] = lines[x2, y2, x1, y1] = line
                 distance_mx[i, j] = distance
-            else:
+            elif len(line) > 0:
                 # not direct
                 distance_mx[i, j] = -1 * distance
+            else:
+                distance_mx[i, j] = 0
 
     # max line as first step in path
-    (i, j, *_), *_ = np.where(distance_mx == np.amax(distance_mx))
+    (i, *_), (j, *_) = np.where(distance_mx == np.amax(distance_mx))
     max_direction = max(np.abs(distance_mx.min()), distance_mx.max())
     # normalization with space size
     distance_mx /= max_direction
@@ -284,6 +306,7 @@ cdef object _find_angle_features(
 
     featues = []
     center_points = []
+
     for angle in angles:
         if len(angle) < 3:
             continue
@@ -296,11 +319,21 @@ cdef object _find_angle_features(
         if distance_a > distance_b:
             a = distance_a
             b = distance_b
+            direc = np.sqrt((center_y - y2) ** 2 + (center_x - x2) ** 2) / max_direction
+            cur_direc = np.sqrt((center_y - y3) ** 2 + (center_x - x3) ** 2) / max_direction
         else:
             a = distance_b
             b = distance_a
+            direc = np.sqrt((center_y - y3) ** 2 + (center_x - x3) ** 2) / max_direction
+            cur_direc = np.sqrt((center_y - y2) ** 2 + (center_x - x2) ** 2) / max_direction
 
-        featues.append((a + b, a, b, np.deg2rad(angle_a)))
+        distance = np.sqrt((y1 - center_y) ** 2 + (x1 - center_x) ** 2) / max_direction
+        featues.append(
+            (a + b, distance, a, direc, b, cur_direc, np.deg2rad(angle_a))
+        )
+
+    if len(featues) < result_size:
+        return None
 
     try:
         estimation_distance_incenter = np.abs(np.stack(
@@ -310,28 +343,40 @@ cdef object _find_angle_features(
     except (ValueError, IndexError):
         return None
 
-    angles = np.zeros((result_size, 3))
+    angles = np.zeros((result_size, 6))
     featues.sort(reverse=True)
-    n = 3 * result_size
+    n = 6 * result_size
+
     if estimation_distance_incenter < dispersion_center_limit:
         return None
 
+    j = 0
     for i in range(result_size):
-        if len(featues[i]) == 4:
-            _, angles[i, 0], angles[i, 1], angles[i, 2] = np.round(
-                featues[i], 3
-            )
+        if len(featues[i]) == 7:
+            (
+                _,
+                angles[i, 0],
+                angles[i, 1],
+                angles[i, 2],
+                angles[i, 3],
+                angles[i, 4],
+                angles[i, 5]
+            ) = featues[i]
+            j += 1
 
-    angles = np.reshape(angles, n)
+    if j == result_size:
+        angles = np.round(np.reshape(angles, n), 3)
 
-    if with_label >= 0:
-        angles = np.append(angles, with_label)
+        if with_label >= 0:
+            angles = np.append(angles, with_label)
 
-    return angles
+        return angles
+    else:
+        return None
 
 
 # # modeule interface # #
-def prepare_image(img: Image, blur_sigma: int = 3) -> np.array:
+def prepare_image(img: Image, blur_sigma: int = 2) -> np.array:
     """Create matrix with content.
     """
     # ImageEnhance.Contrast(img
@@ -342,9 +387,9 @@ def prepare_image(img: Image, blur_sigma: int = 3) -> np.array:
     ) / 256
     img_m = _img_resize(_find_content_rect(img_m), SPACE_SIZE)
     if img_m is None:
-        raise ValueError("Image size problem")
+        raise TypeError("Image size problem")
 
-    img_m = gaussian_filter(img_m, sigma=3)
+    img_m = gaussian_filter(img_m, sigma=blur_sigma)
     val_mean = img_m.mean()
     img_m = img_m - val_mean
     img_m *= img_m > 0
@@ -356,25 +401,36 @@ def find_angle_features(
     img: np.array,
     step: int = 6,
     result_size: int = 6,
-    dispersion_center_limit: float = 0.12,
+    dispersion_center_limit: float = 0.1,
     show: bool = False,
     with_label: int = None
 ) -> np.array:
     """Create features from image as array with:
     [
+        distance from angle point C1 to center,
         straight line A1 length,
+        distance from angle point A1 to center,
         straight line B1 length,
+        distance from angle point B1 to center,
         angle a1,
+        distance from angle point C2 to center,
         straight line A2 length,
+        distance from angle point A2 to center,
         straight line B2 length,
+        distance from angle point B2 to center,
         angle a2,
         ...
+        distance from angle point C<result_size> to center,
         straight line A<result_size> length,
+        distance from angle point A<result_size> to center,
         straight line B<result_size> length,
+        distance from angle point B<result_size> to center,
         angle a<result_size>
     ]
     """
+    #print("Cython version 'find_angle_features'.")
     assert not show, "Not supported in optimized method."
+
     return _find_angle_features(
         img, step, result_size, dispersion_center_limit, with_label
     )

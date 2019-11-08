@@ -2,8 +2,9 @@ import os
 from collections import defaultdict
 from collections.abc import Iterable
 from time import monotonic
-import pandas as pd
 
+import numpy as np
+import pandas as pd
 from PIL import Image
 
 try:
@@ -59,7 +60,8 @@ def images(
 def create_dataset(
     base_dir: str = "numbers",
     features_count: int = 6,
-    limit_group_size: int = 1000
+    limit_group_size: int = 1000,
+    show: bool = False
 ) -> Iterable:
     """Create image view.
     """
@@ -70,15 +72,16 @@ def create_dataset(
             try:
                 img = Image.open(img_path).convert("L")
                 img_m = prepare_image(img)
-                features = find_angle_features(
-                    img_m,
-                    show=False,
-                    result_size=features_count,
-                    with_label=num
-                )
-            except Exception as err:
-                print(f"Error '{err}' in '{img_path}'")
+            except TypeError as err:
+                print(f"Image format problem '{err}' in '{img_path}'")
                 continue
+
+            features = find_angle_features(
+                img_m,
+                show=show,
+                result_size=features_count,
+                with_label=num
+            )
 
             if features is None:
                 bad_values += 1
@@ -101,14 +104,19 @@ def create_dataset(
 def create_df(
     base_dir: str = "numbers",
     features_count: int = 6,
-    limit_group_size: int = 1000
+    limit_group_size: int = 1000,
+    show: bool = False,
+    random_sort: bool = True,
 ) -> pd.DataFrame:
     """Create features as DataFreame.
     """
     fields = []
     for index in range(1, features_count + 1):
+        fields.append(f"center_distance{index}")
         fields.append(f"line_a{index}")
+        fields.append(f"center_distance_a{index}")
         fields.append(f"line_b{index}")
+        fields.append(f"center_distance_b{index}")
         fields.append(f"angle{index}")
     fields.append("number")
 
@@ -116,10 +124,16 @@ def create_df(
         data=create_dataset(
             base_dir=base_dir,
             features_count=features_count,
-            limit_group_size=limit_group_size
+            limit_group_size=limit_group_size,
+            show=show
         ),
         columns=fields
     )
+    if random_sort:
+        data_set.insert(0, "rand", np.random.random(len(data_set)))
+        data_set.sort_values(by="rand", inplace=True)
+        del data_set["rand"]
+
     for field in fields:
         if field == "number":
             continue

@@ -70,7 +70,7 @@ def img_resize(img: np.array, size: int = SPACE_SIZE) -> np.array:
         return None
 
 
-def prepare_image(img: Image, blur_sigma: int = 3) -> np.array:
+def prepare_image(img: Image, blur_sigma: int = 2) -> np.array:
     """Create matrix with content.
     """
     # ImageEnhance.Contrast(img
@@ -81,9 +81,9 @@ def prepare_image(img: Image, blur_sigma: int = 3) -> np.array:
     ) / 256
     img_m = img_resize(find_content_rect(img_m))
     if img_m is None:
-        raise ValueError("Image size problem")
+        raise TypeError("Image size problem")
 
-    img_m = gaussian_filter(img_m, sigma=3)
+    img_m = gaussian_filter(img_m, sigma=blur_sigma)
     val_mean = img_m.mean()
     img_m = img_m - val_mean
     img_m *= img_m > 0
@@ -94,18 +94,37 @@ def prepare_image(img: Image, blur_sigma: int = 3) -> np.array:
 def line_eq(x1, y1, x2, y2) -> Iterable:
     """Equation of the line.
     """
-    k = (y2 - y1) / ((x2 - x1) or 1)
-    a = min(x1, x2)
-    w = max(x1, x2) - a
-    for i in range(w):
-        x = a + i
-        yield (x, int(np.round((x - x1) * k + y1)))
+    dx, dy = (x2 - x1), (y2 - y1)
+    a_dx, a_dy = abs(dx), abs(dy)
+    if a_dx > a_dy:
+        k = dy / dx
+        if x1 < x2:
+            a = x1
+            w = x2 - a
+        else:
+            a = x2
+            w = x1 - a
+
+        for i in range(w):
+            x = a + i
+            yield (x, int(round((x - x1) * k + y1)))
+
+    elif a_dy > 0:
+        k = dx / dy
+        if y1 < y2:
+            a = y1
+            w = y2 - a
+        else:
+            a = y2
+            w = y1 - a
+
+        for i in range(w):
+            y = a + i
+            yield (int(round((y - y1) * k + x1)), y)
 
 
 def point_distance(x1, y1, x2, y2) -> float:
-    return np.sqrt(
-        np.power(y1 - y2, 2) + np.power(x1 - x2, 2)
-    )
+    return np.sqrt((y1 - y2) ** 2 + (x1 - x2) ** 2)
 
 
 def angle_calc(x0, y0, x1, y1, x2, y2) -> float:
@@ -119,8 +138,7 @@ def angle_calc(x0, y0, x1, y1, x2, y2) -> float:
     a1, b1 = y0 - y1, x1 - x0
     a2, b2 = y0 - y2, x2 - x0
     return np.degrees(np.arccos((a1 * a2 + b1 * b2) / (
-        np.sqrt(np.power(a1, 2) + np.power(b1, 2)) *
-        np.sqrt(np.power(a2, 2) + np.power(b2, 2))
+        np.sqrt(a1 ** 2 + b1 ** 2) * np.sqrt(a2 ** 2 + b2 ** 2)
     )))
 
 
@@ -187,7 +205,7 @@ def find_angle_features(
     img: np.array,
     step: int = 6,
     result_size: int = 6,
-    dispersion_center_limit: float = 0.12,
+    dispersion_center_limit: float = 0.1,
     show: bool = False,
     with_label: int = None
 ) -> np.array:
@@ -206,6 +224,8 @@ def find_angle_features(
     ]
     """
     w, h = img.shape
+    center_x = w // 2
+    center_y = h // 2
     points = {}
     step_half = step // 2
 
@@ -224,9 +244,7 @@ def find_angle_features(
                 direc = SPACE_SIZE * 2
                 x = y = 1
 
-            cur_direc = np.sqrt(
-                np.power(y - j, 2) + np.power(x - i, 2)
-            )
+            cur_direc = np.sqrt((y - j) ** 2 + (x - i) ** 2)
             if cur_direc < direc:
                 points[p] = cur_direc, i, j
 
@@ -246,19 +264,22 @@ def find_angle_features(
         for j in range(n):
             x2, y2 = path_points[j]
             line = list(line_eq(x1, y1, x2, y2))
-            distance = np.sqrt(
-                np.power(y1 - y2, 2) + np.power(x1 - x2, 2)
-            )
-            if len(line) > 2 and all(img[x, y] > 0 for x, y in line):
+            if line:
+                distance = np.sqrt((y1 - y2) ** 2 + (x1 - x2) ** 2)
+            else:
+                distance = 0
+
+            if line and all(img[x, y] > 0 for x, y in line):
                 # direct
-                lines[x1, y1, x2, y2] = line
+                lines[x1, y1, x2, y2] = lines[x2, y2, x1, y1] = line
                 distance_mx[i, j] = distance
             else:
                 # not direct
                 distance_mx[i, j] = -1 * distance
 
     # max line as first step in path
-    (i, j, *_), *_ = np.where(distance_mx == np.amax(distance_mx))
+    (i, *_), (j, *_) = np.where(distance_mx == np.amax(distance_mx))
+
     max_direction = max(np.abs(distance_mx.min()), distance_mx.max())
     # normalization with space size
     distance_mx /= max_direction
@@ -273,7 +294,6 @@ def find_angle_features(
         result_size * 2, path_points, distance_mx.copy(), result_points
     )
     angles = []
-
     for index, x, y in result_points:
         if not angles:
             angles.append([])
@@ -297,9 +317,29 @@ def find_angle_features(
         distance_a = np.round(distance_mx[index1, index2], 3)
         distance_b = np.round(distance_mx[index1, index3], 3)
         angle_a = np.round(angle_calc(x1, y1, x2, y2, x3, y3), 2)
-        a = max(distance_a, distance_b)
-        b = min(distance_a, distance_b)
-        featues.append((a + b, a, b, np.round(np.deg2rad(angle_a), 3)))
+
+        if distance_a > distance_b:
+            a = distance_a
+            b = distance_b
+            distance_c_a = np.sqrt(
+                (center_y - y2) ** 2 + (center_x - x2) ** 2) / max_direction
+            distance_c_b = np.sqrt(
+                (center_y - y3) ** 2 + (center_x - x3) ** 2) / max_direction
+        else:
+            a = distance_b
+            b = distance_a
+            distance_c_a = np.sqrt(
+                (center_y - y3) ** 2 + (center_x - x3) ** 2) / max_direction
+            distance_c_b = np.sqrt(
+                (center_y - y2) ** 2 + (center_x - x2) ** 2) / max_direction
+
+        distance = np.sqrt(
+            (y1 - center_y) ** 2 + (x1 - center_x) ** 2) / max_direction
+
+        c_angle = np.round(np.deg2rad(angle_a), 3)
+        featues.append(
+            (a + b, distance, a, distance_c_a, b, distance_c_b, c_angle)
+        )
 
         if show:
             result_tmp = img_area.copy()
@@ -309,8 +349,14 @@ def find_angle_features(
                 result_tmp[x, y] = 1
 
             plt.imshow(result_tmp, interpolation="nearest", cmap="gray")
-            plt.title(f"line: {distance_a} {distance_b} {angle_a}")
-            plt.show()
+            plt.title(
+                f"line: {distance_a} {distance_b} {angle_a}"
+                f" r: {distance}"
+            )
+            plt.show(block=True)
+
+    if len(featues) < result_size:
+        return None
 
     try:
         estimation_distance_incenter = np.abs(np.stack(
@@ -320,19 +366,24 @@ def find_angle_features(
     except (ValueError, IndexError):
         return None
 
-    angles = np.zeros((result_size, 3))
+    angles = np.zeros((result_size, 6))
     featues.sort(reverse=True)
-    n = 3 * result_size
+    n = 6 * result_size
     if estimation_distance_incenter < dispersion_center_limit:
         return None
 
-    try:
-        for i in range(result_size):
-            _, angles[i, 0], angles[i, 1], angles[i, 2] = featues[i]
-    except IndexError:
-        return None
+    for i in range(result_size):
+        (
+            _,
+            angles[i, 0],
+            angles[i, 1],
+            angles[i, 2],
+            angles[i, 3],
+            angles[i, 4],
+            angles[i, 5],
+        ) = featues[i]  # noqa
 
-    angles = np.reshape(angles, n)
+    angles = np.round(np.reshape(angles, n), 3)
 
     if with_label is not None:
         angles = np.append(angles, with_label)

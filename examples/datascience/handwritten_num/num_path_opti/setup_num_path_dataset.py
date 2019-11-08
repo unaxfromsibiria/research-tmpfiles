@@ -12,7 +12,7 @@ modules = [
             "-O3",
             "-ffast-math",
             "-march=native",
-            "-fopenmp",
+            # "-fopenmp",
             "-ftree-loop-distribution",
             "-floop-nest-optimize",
             "-floop-block",
@@ -29,5 +29,8 @@ setup(
             "nonecheck": False,
             "language_level": 3,
             "infer_types": True,
-        })
+            "boundscheck": False,
+            "cdivision": True,
+        }
+    )
 )
