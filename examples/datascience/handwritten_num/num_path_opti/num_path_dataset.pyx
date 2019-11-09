@@ -279,7 +279,7 @@ cdef object _find_angle_features(
     (i, *_), (j, *_) = np.where(distance_mx == np.amax(distance_mx))
     max_direction = max(np.abs(distance_mx.min()), distance_mx.max())
     # normalization with space size
-    distance_mx /= max_direction
+    distance_mx = np.round(distance_mx / max_direction, 4)
 
     result_points = []
     x1, y1 = path_points[i]
@@ -315,7 +315,7 @@ cdef object _find_angle_features(
         center_points.append(index1)
         distance_a = distance_mx[index1, index2]
         distance_b = distance_mx[index1, index3]
-        angle_a = np.round(_angle_calc(x1, y1, x2, y2, x3, y3), 2)
+        angle_a = _angle_calc(x1, y1, x2, y2, x3, y3)
         if distance_a > distance_b:
             a = distance_a
             b = distance_b
@@ -365,7 +365,7 @@ cdef object _find_angle_features(
             j += 1
 
     if j == result_size:
-        angles = np.round(np.reshape(angles, n), 3)
+        angles = np.round(np.reshape(angles, n), 4)
 
         if with_label >= 0:
             angles = np.append(angles, with_label)

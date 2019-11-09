@@ -282,7 +282,7 @@ def find_angle_features(
 
     max_direction = max(np.abs(distance_mx.min()), distance_mx.max())
     # normalization with space size
-    distance_mx /= max_direction
+    distance_mx = np.round(distance_mx / max_direction, 4)
 
     result_points = []
     x1, y1 = path_points[i]
@@ -314,9 +314,9 @@ def find_angle_features(
 
         (index2, x2, y2), (index1, x1, y1), (index3, x3, y3) = angle
         center_points.append(index1)
-        distance_a = np.round(distance_mx[index1, index2], 3)
-        distance_b = np.round(distance_mx[index1, index3], 3)
-        angle_a = np.round(angle_calc(x1, y1, x2, y2, x3, y3), 2)
+        distance_a = distance_mx[index1, index2]
+        distance_b = distance_mx[index1, index3]
+        angle_a = angle_calc(x1, y1, x2, y2, x3, y3)
 
         if distance_a > distance_b:
             a = distance_a
@@ -336,7 +336,7 @@ def find_angle_features(
         distance = np.sqrt(
             (y1 - center_y) ** 2 + (x1 - center_x) ** 2) / max_direction
 
-        c_angle = np.round(np.deg2rad(angle_a), 3)
+        c_angle = np.deg2rad(angle_a)
         featues.append(
             (a + b, distance, a, distance_c_a, b, distance_c_b, c_angle)
         )
@@ -383,7 +383,7 @@ def find_angle_features(
             angles[i, 5],
         ) = featues[i]  # noqa
 
-    angles = np.round(np.reshape(angles, n), 3)
+    angles = np.round(np.reshape(angles, n), 4)
 
     if with_label is not None:
         angles = np.append(angles, with_label)
