@@ -17,6 +17,7 @@ modules = [
             "-floop-nest-optimize",
             "-floop-block",
         ],
+        # language="c++"
         # extra_link_args=["-fopenmp"],
     )
 ]

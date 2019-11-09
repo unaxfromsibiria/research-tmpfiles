@@ -1,4 +1,4 @@
-# This implementation in ~15.5 times faster than base method.
+# This implementation in ~3 times faster than base method.
 # 1) Build methods as shared object library (handwritten_num/num_path_opti/num_path_dataset.cpython-<arch>.so):
 #   cd handwritten_num/num_path_opti/
 #   python setup_num_path_dataset.py build_ext --inplace
@@ -17,9 +17,15 @@ cdef float LIGHTNESS_LIMIT = 0.35
 cdef int MIN_SIZE_VALUE = 3
 
 
+cdef float math_sqrt(float value):
+    """Faster then math.sqrt and np.sqrt in this case.
+    """
+    return value ** 0.5
+
+
 cdef float _point_distance(int x1, int y1, int x2, int y2):
-    cdef long param_a = y1 - y2, param_b = x1 - x2
-    return float(np.sqrt(param_a ** 2 + param_b ** 2))
+    cdef double param_a = y1 - y2, param_b = x1 - x2
+    return float(math_sqrt(param_a ** 2 + param_b ** 2))
 
 
 cdef float _angle_calc(int x0, int y0, int x1, int y1, int x2, int y2):
@@ -30,11 +36,11 @@ cdef float _angle_calc(int x0, int y0, int x1, int y1, int x2, int y2):
     # A = y1 - y2
     # B = x2 - x1
     # C = x1 * y2 - x2 * y1
-    cdef long a1 = y0 - y1, b1 = x1 - x0
-    cdef long a2 = y0 - y2, b2 = x2 - x0
+    cdef double a1 = y0 - y1, b1 = x1 - x0
+    cdef double a2 = y0 - y2, b2 = x2 - x0
     return np.degrees(
         np.arccos(
-            (a1 * a2 + b1 * b2) / (np.sqrt(a1 ** 2 + b1 ** 2) * np.sqrt(a2 ** 2 + b2 ** 2))
+            (a1 * a2 + b1 * b2) / (math_sqrt(a1 ** 2 + b1 ** 2) * math_sqrt(a2 ** 2 + b2 ** 2))
         )
     )
 
@@ -83,7 +89,7 @@ cdef object _find_content_rect(object img):
 cdef list _line_eq(int x1, int y1, int x2, int y2):
     """Equation of the line.
     """
-    cdef i = 0, a, w, x, y
+    cdef int i = 0, a, w, x, y
     cdef float k, a_dx, a_dy, dx = float(x2 - x1), dy = float(y2 - y1)
     result = []
     # abs
@@ -221,10 +227,9 @@ cdef object _find_angle_features(
 ):
     """ Cython based method 'find_angle_features'.
     """
-    cdef int w, h, step_half, i, p_i, p_j, x, y, n, center_x, center_y
-    cdef float direc, val, cur_direc, distance
+    cdef int w, h, step_half, p_i, p_j, x, y, n, center_x, center_y, p_index1, p_index2, i, j
+    cdef float direc, val, cur_direc, distance, max_direction
     cdef int index, index1, x1, y1, index2, x2, y2, index3, x3, y3
-    cdef int p_index1, p_index2
     cdef float distance_a, distance_b, angle_a, a, b
     cdef float estimation_distance_incenter
 
@@ -249,9 +254,7 @@ cdef object _find_angle_features(
                 direc = SPACE_SIZE * 2
                 x = y = 1
 
-            cur_direc = np.sqrt(
-                (y - j) ** 2 + (x - i) ** 2
-            )
+            cur_direc = math_sqrt(float(y - j) ** 2 + float(x - i) ** 2)
             if cur_direc < direc:
                 points[p_i, p_j] = cur_direc, i, j
 
@@ -264,7 +267,7 @@ cdef object _find_angle_features(
         for j in range(n):
             x2, y2 = path_points[j]
             line = _line_eq(x1, y1, x2, y2)
-            distance = np.sqrt((y1 - y2) ** 2 + (x1 - x2) ** 2)
+            distance = math_sqrt((y1 - y2) ** 2 + (x1 - x2) ** 2)
             if len(line) > 0 and all(img[x, y] > 0 for x, y in line):
                 # direct
                 lines[x1, y1, x2, y2] = lines[x2, y2, x1, y1] = line
@@ -319,15 +322,15 @@ cdef object _find_angle_features(
         if distance_a > distance_b:
             a = distance_a
             b = distance_b
-            direc = np.sqrt((center_y - y2) ** 2 + (center_x - x2) ** 2) / max_direction
-            cur_direc = np.sqrt((center_y - y3) ** 2 + (center_x - x3) ** 2) / max_direction
+            direc = math_sqrt(float(center_y - y2) ** 2 + float(center_x - x2) ** 2) / max_direction
+            cur_direc = math_sqrt(float(center_y - y3) ** 2 + float(center_x - x3) ** 2) / max_direction
         else:
             a = distance_b
             b = distance_a
-            direc = np.sqrt((center_y - y3) ** 2 + (center_x - x3) ** 2) / max_direction
-            cur_direc = np.sqrt((center_y - y2) ** 2 + (center_x - x2) ** 2) / max_direction
+            direc = math_sqrt(float(center_y - y3) ** 2 + float(center_x - x3) ** 2) / max_direction
+            cur_direc = math_sqrt(float(center_y - y2) ** 2 + float(center_x - x2) ** 2) / max_direction
 
-        distance = np.sqrt((y1 - center_y) ** 2 + (x1 - center_x) ** 2) / max_direction
+        distance = math_sqrt(float(y1 - center_y) ** 2 + float(x1 - center_x) ** 2) / max_direction
         featues.append(
             (a + b, distance, a, direc, b, cur_direc, np.deg2rad(angle_a))
         )
