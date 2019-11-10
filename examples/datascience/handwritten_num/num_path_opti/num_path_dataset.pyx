@@ -1,4 +1,4 @@
-# This implementation in ~3 times faster than base method.
+# This implementation in ~4 times faster than base method.
 # 1) Build methods as shared object library (handwritten_num/num_path_opti/num_path_dataset.cpython-<arch>.so):
 #   cd handwritten_num/num_path_opti/
 #   python setup_num_path_dataset.py build_ext --inplace
@@ -10,25 +10,27 @@
 import itertools
 import numpy as np
 from PIL import Image, ImageOps, ImageEnhance
+from libc.stdlib cimport malloc, free, realloc
 from scipy.ndimage.filters import gaussian_filter
 
 cdef int SPACE_SIZE = 64
-cdef float LIGHTNESS_LIMIT = 0.35
+cdef double LIGHTNESS_LIMIT = 0.35
 cdef int MIN_SIZE_VALUE = 3
+cdef int MAX_LINE_LEN = int(1 + (SPACE_SIZE ** 2 * 2) ** 0.5)
 
 
-cdef float math_sqrt(float value):
+cdef double math_sqrt(double value):
     """Faster then math.sqrt and np.sqrt in this case.
     """
     return value ** 0.5
 
 
-cdef float _point_distance(int x1, int y1, int x2, int y2):
+cdef double _point_distance(int x1, int y1, int x2, int y2):
     cdef double param_a = y1 - y2, param_b = x1 - x2
-    return float(math_sqrt(param_a ** 2 + param_b ** 2))
+    return math_sqrt(param_a ** 2 + param_b ** 2)
 
 
-cdef float _angle_calc(int x0, int y0, int x1, int y1, int x2, int y2):
+cdef double _angle_calc(int x0, int y0, int x1, int y1, int x2, int y2):
     """Calc angle.
     """
     # A1 * x + B1 * y + C1 = 0
@@ -45,13 +47,13 @@ cdef float _angle_calc(int x0, int y0, int x1, int y1, int x2, int y2):
     )
 
 
-cdef float _triangle_sq(int x0, int y0, int x1, int y1, int x2, int y2):
+cdef double _triangle_sq(int x0, int y0, int x1, int y1, int x2, int y2):
     """Area of triangle.
     """
     return (
         _point_distance(x0, y0, x1, y1) *
         _point_distance(x0, y0, x2, y2) *
-        float(np.sin(np.deg2rad(_angle_calc(x0, y0, x1, y1, x2, y2))))
+        np.sin(np.deg2rad(_angle_calc(x0, y0, x1, y1, x2, y2)))
     ) / 2
 
 
@@ -86,12 +88,13 @@ cdef object _find_content_rect(object img):
     return img[x1: x2, y1: y2]
 
 
-cdef list _line_eq(int x1, int y1, int x2, int y2):
+cdef int* _line_eq(int x1, int y1, int x2, int y2):
     """Equation of the line.
+    Points as [x1, y1, x2, y2, ... xn, yn]
     """
-    cdef int i = 0, a, w, x, y
-    cdef float k, a_dx, a_dy, dx = float(x2 - x1), dy = float(y2 - y1)
-    result = []
+    cdef int i = 0, n = 2 * MAX_LINE_LEN, a = 0, w = 0, x, y
+    cdef double k, a_dx, a_dy, dx = x2 - x1, dy = y2 - y1
+    cdef int *result = <int *>malloc(sizeof(int) * n)
     # abs
     a_dx = abs(dx)
     a_dy = abs(dy)
@@ -106,7 +109,8 @@ cdef list _line_eq(int x1, int y1, int x2, int y2):
 
         for i in range(w):
             x = a + i
-            result.append((x, int(round((x - x1) * k + y1))))
+            result[i * 2] = x
+            result[i * 2 + 1] = int(0.5 + (x - x1) * k + y1)
 
     elif a_dy > 0:
         k = dx / dy
@@ -119,7 +123,26 @@ cdef list _line_eq(int x1, int y1, int x2, int y2):
 
         for i in range(w):
             y = a + i
-            result.append((int(round((y - y1) * k + x1)), y))
+            result[i * 2] = int(0.5 + (y - y1) * k + x1)
+            result[i * 2 + 1] = y
+
+    for i in range(w * 2, n):
+        result[i] = -1
+
+    return result
+
+
+def line_eq(x1, y1, x2, y2) -> list:
+    """External method for testing.
+    """
+    cdef int line_len = 2 * MAX_LINE_LEN, x, y, i
+    line = _line_eq(x1, y1, x2, y2)
+    result = []
+    for i in range(MAX_LINE_LEN):
+        x = line[i * 2]
+        y = line[i * 2 + 1]
+        if x >= 0:
+            result.append((x, y))
 
     return result
 
@@ -168,7 +191,7 @@ cdef _next_path_step(
     Triangles created by lines of current step and previous.
     """
     cdef int p0, x1, y1, p1, x2, y2, new_p, x3, y3
-    cdef float next_sq, sq
+    cdef double next_sq, sq
     cdef int next_point_p = 0, next_point_x = 0, next_point_y = 0
     cdef bint next_point
 
@@ -222,22 +245,21 @@ cdef object _find_angle_features(
     img: object, # np.array
     int step,
     int result_size,
-    float dispersion_center_limit,
+    double dispersion_center_limit,
     int with_label
 ):
     """ Cython based method 'find_angle_features'.
     """
     cdef int w, h, step_half, p_i, p_j, x, y, n, center_x, center_y, p_index1, p_index2, i, j
-    cdef float direc, val, cur_direc, distance, max_direction
-    cdef int index, index1, x1, y1, index2, x2, y2, index3, x3, y3
-    cdef float distance_a, distance_b, angle_a, a, b
-    cdef float estimation_distance_incenter
+    cdef double direc, val, cur_direc, distance, max_direction
+    cdef int index, index1, x1, y1, index2, x2, y2, index3, x3, y3, line_len
+    cdef double distance_a, distance_b, angle_a, a, b
+    cdef double estimation_distance_incenter
 
     w, h = img.shape
     center_x = w // 2
     center_y = h // 2
     points = {}
-    lines = {}
     step_half = step // 2
 
     for i in range(w):
@@ -262,21 +284,36 @@ cdef object _find_angle_features(
     n = len(path_points)
     distance_mx = np.zeros((n, n))
 
+    line_len = 2 * MAX_LINE_LEN
     for i in range(n):
         x1, y1 = path_points[i]
         for j in range(n):
             x2, y2 = path_points[j]
             line = _line_eq(x1, y1, x2, y2)
+            p_j = -1
+            for p_i in range(MAX_LINE_LEN):
+                x = line[p_i * 2]
+                y = line[p_i * 2 + 1]
+
+                if x < 0:
+                    break
+                elif p_i == 0:
+                    p_j = 1
+
+                if not(img[x, y] > 0):
+                    p_j = 0
+                    break
+
             distance = math_sqrt((y1 - y2) ** 2 + (x1 - x2) ** 2)
-            if len(line) > 0 and all(img[x, y] > 0 for x, y in line):
-                # direct
-                lines[x1, y1, x2, y2] = lines[x2, y2, x1, y1] = line
+            if p_j == 1:
                 distance_mx[i, j] = distance
-            elif len(line) > 0:
+            elif p_j == 0:
                 # not direct
                 distance_mx[i, j] = -1 * distance
             else:
                 distance_mx[i, j] = 0
+
+            free(line)
 
     # max line as first step in path
     (i, *_), (j, *_) = np.where(distance_mx == np.amax(distance_mx))
