@@ -25,42 +25,45 @@
 # This dataset built by create.py on MNIST database of handwritten digits. In ipython:
 # # I advise to build Cython implementation first (see code of create.py).
 # from create import create_df
-# df = create_df("/<path to MNIST project (cloned from github)>/", features_count=8, limit_group_size=1000, random_sort=True)
+# df = create_df("/<path to MNIST project (cloned from github)>/", features_count=5, limit_group_size=800, random_sort=True)
 # # after ~2 minutes
-# df.to_csv("./data/a_dsta_set_1000_8_0.csv")
+# df.to_csv("./data/a_dsta_set_1500_5_01.csv ", index=False)
 #
 # Result in the dataset:
-# AUC for '0': 100.0%
-# AUC for '1': 99.89%
-# AUC for '2': 99.829%
-# AUC for '3': 99.77%
-# AUC for '4': 99.933%
-# AUC for '5': 100.0%
-# AUC for '6': 100.0%
-# AUC for '7': 99.992%
-# AUC for '8': 100.0%
-# AUC for '9': 100.0%
+# AUC for '0': 97.532%
+# AUC for '1': 98.579%
+# AUC for '2': 97.45%
+# AUC for '3': 95.16%
+# AUC for '4': 93.731%
+# AUC for '5': 94.938%
+# AUC for '6': 94.642%
+# AUC for '7': 97.442%
+# AUC for '8': 92.144%
+# AUC for '9': 94.12%
+
 
 import sys
 
 import numpy as np
 import pandas as pd
+from scipy.stats import boxcox
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import roc_auc_score
 
 classifier_params = dict(
     n_estimators=500,
-    max_depth=10,
+    max_depth=140,
     n_jobs=1,
     warm_start=True,
     verbose=1
 )
-random_state = 1010
+fields = []
+random_state = 77
 
 
 def get_one_feature_model(
     data_set: pd.DataFrame, feature: int, **options
-) -> RandomForestClassifier:
+) -> (RandomForestClassifier, float):
     """Model of binary classification for one class.
     """
     in_class_dataset = data_set[data_set.number == feature]
@@ -78,15 +81,27 @@ def get_one_feature_model(
     sub_dataset.sort_values(by="rand", inplace=True)
     del sub_dataset["rand"]
 
-    train = sub_dataset.sample(frac=0.8, random_state=random_state)
+    train = sub_dataset.sample(frac=0.9, random_state=random_state)
     test = sub_dataset.drop(train.index)
     y_test = test.number.astype("int")
     y_train = train.number.astype("int")
-    fields = set(train.columns.values)
-    fields.remove("number")
-    fields = sorted(fields)
+
     x_train = train[fields]
     x_test = test[fields]
+    # normalization with boxcox
+    for field in fields:
+        feature_set = x_train[field]
+        skew = round(feature_set.skew(), 3)
+        if abs(skew) > 0.1:
+            under_zero = (feature_set == 0).sum()
+            assert under_zero == 0, f"0 in {field}"
+            x_train[field], ratio = boxcox(feature_set)
+            new_skew = round(x_train[field].skew(), 3)
+            x_test[field] = boxcox(x_test[field], ratio)
+            print(
+                f"For '{feature}' in '{field}' skew: {skew} -> "
+                f"{new_skew} Box-Cox ratio: {ratio}"
+            )
 
     params = classifier_params.copy()
     params.update(options)
@@ -98,8 +113,14 @@ def get_one_feature_model(
 
 
 example_dataset = pd.read_csv(sys.argv[1])
-
 print(example_dataset.info())
+for field in set(example_dataset.columns.values):
+    if "number" in field:
+        continue
+    if "Unnamed" in field:
+        continue
+
+    fields.append(field)
 
 values = []
 for num in range(10):

@@ -7,8 +7,10 @@ from PIL import Image, ImageOps
 from scipy.ndimage.filters import gaussian_filter
 
 SPACE_SIZE = 64
-LIGHTNESS_LIMIT = 0.35
+LIGHTNESS_LIMIT = 0.365
 MIN_SIZE_VALUE = 3
+ONE_FEATURE_COUNT = 7
+SCALE_RATIO = 1000.0
 
 
 def find_content_rect(img: np.array) -> np.array:
@@ -70,7 +72,7 @@ def img_resize(img: np.array, size: int = SPACE_SIZE) -> np.array:
         return None
 
 
-def prepare_image(img: Image, blur_sigma: int = 2) -> np.array:
+def prepare_image(img: Image, blur_sigma: int = 3) -> np.array:
     """Create matrix with content.
     """
     # ImageEnhance.Contrast(img
@@ -97,7 +99,7 @@ def line_eq(x1, y1, x2, y2) -> Iterable:
     dx, dy = (x2 - x1), (y2 - y1)
     a_dx, a_dy = abs(dx), abs(dy)
     if a_dx > a_dy:
-        k = dy / dx
+        k = dy / dx * SCALE_RATIO
         if x1 < x2:
             a = x1
             w = x2 - a
@@ -107,10 +109,10 @@ def line_eq(x1, y1, x2, y2) -> Iterable:
 
         for i in range(w):
             x = a + i
-            yield (x, int(round((x - x1) * k + y1)))
+            yield (x, int(round((x - x1) * k) // SCALE_RATIO) + y1)
 
     elif a_dy > 0:
-        k = dx / dy
+        k = dx / dy * SCALE_RATIO
         if y1 < y2:
             a = y1
             w = y2 - a
@@ -120,7 +122,7 @@ def line_eq(x1, y1, x2, y2) -> Iterable:
 
         for i in range(w):
             y = a + i
-            yield (int(round((y - y1) * k + x1)), y)
+            yield (int(round((y - y1) * k) // SCALE_RATIO) + x1, y)
 
 
 def point_distance(x1, y1, x2, y2) -> float:
@@ -205,21 +207,30 @@ def find_angle_features(
     img: np.array,
     step: int = 6,
     result_size: int = 6,
-    dispersion_center_limit: float = 0.1,
+    dispersion_center_limit: float = 0.215,
     show: bool = False,
     with_label: int = None
 ) -> np.array:
     """Create features from image as array with:
     [
+        distance from angle point C1 to center,
         straight line A1 length,
+        distance from angle point A1 to center,
         straight line B1 length,
+        distance from angle point B1 to center,
         angle a1,
+        distance from angle point C2 to center,
         straight line A2 length,
+        distance from angle point A2 to center,
         straight line B2 length,
+        distance from angle point B2 to center,
         angle a2,
         ...
+        distance from angle point C<result_size> to center,
         straight line A<result_size> length,
+        distance from angle point A<result_size> to center,
         straight line B<result_size> length,
+        distance from angle point B<result_size> to center,
         angle a<result_size>
     ]
     """
@@ -262,20 +273,21 @@ def find_angle_features(
     for i in range(n):
         x1, y1 = path_points[i]
         for j in range(n):
-            x2, y2 = path_points[j]
-            line = list(line_eq(x1, y1, x2, y2))
-            if line:
-                distance = np.sqrt((y1 - y2) ** 2 + (x1 - x2) ** 2)
-            else:
-                distance = 0
+            if distance_mx[i, j] == 0:
+                x2, y2 = path_points[j]
+                line = list(line_eq(x1, y1, x2, y2))
+                if line:
+                    distance = np.sqrt((y1 - y2) ** 2 + (x1 - x2) ** 2)
+                else:
+                    distance = 0
 
-            if line and all(img[x, y] > 0 for x, y in line):
-                # direct
-                lines[x1, y1, x2, y2] = lines[x2, y2, x1, y1] = line
-                distance_mx[i, j] = distance
-            else:
-                # not direct
-                distance_mx[i, j] = -1 * distance
+                if line and all(img[x, y] > 0 for x, y in line):
+                    # direct
+                    lines[x1, y1, x2, y2] = lines[x2, y2, x1, y1] = line
+                    distance_mx[i, j] = distance_mx[j, i] = distance
+                else:
+                    # not direct
+                    distance_mx[i, j] = distance_mx[j, i] = -1 * distance
 
     # max line as first step in path
     (i, *_), (j, *_) = np.where(distance_mx == np.amax(distance_mx))
@@ -336,9 +348,12 @@ def find_angle_features(
         distance = np.sqrt(
             (y1 - center_y) ** 2 + (x1 - center_x) ** 2) / max_direction
 
-        c_angle = np.deg2rad(angle_a)
+        angle_c = angle_calc(x1, y1, center_x, center_y, 0, 0)
+        angle_c_rad = np.deg2rad(angle_c or 180)
+        angle_a_rad = np.deg2rad(angle_a or 180)
+
         featues.append(
-            (a + b, distance, a, distance_c_a, b, distance_c_b, c_angle)
+            (a + b, distance, angle_c_rad, a, distance_c_a or 0.1, b, distance_c_b or 0.1, angle_a_rad)  # noqa
         )
 
         if show:
@@ -366,9 +381,9 @@ def find_angle_features(
     except (ValueError, IndexError):
         return None
 
-    angles = np.zeros((result_size, 6))
+    angles = np.zeros((result_size, ONE_FEATURE_COUNT))
     featues.sort(reverse=True)
-    n = 6 * result_size
+    n = ONE_FEATURE_COUNT * result_size
     if estimation_distance_incenter < dispersion_center_limit:
         return None
 
@@ -381,6 +396,7 @@ def find_angle_features(
             angles[i, 3],
             angles[i, 4],
             angles[i, 5],
+            angles[i, 6],
         ) = featues[i]  # noqa
 
     angles = np.round(np.reshape(angles, n), 4)

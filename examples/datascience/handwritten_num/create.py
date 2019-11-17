@@ -113,11 +113,13 @@ def create_df(
     fields = []
     for index in range(1, features_count + 1):
         fields.append(f"center_distance{index}")
+        fields.append(f"angle_c{index}")
         fields.append(f"line_a{index}")
         fields.append(f"center_distance_a{index}")
         fields.append(f"line_b{index}")
         fields.append(f"center_distance_b{index}")
         fields.append(f"angle{index}")
+
     fields.append("number")
 
     data_set = pd.DataFrame(
@@ -137,7 +139,11 @@ def create_df(
     for field in fields:
         if field == "number":
             continue
-
-        print(f"Estimation of distribution in {field}", data_set[field].skew())
+        under_zero_error = (data_set[field] < 0).sum()
+        print(
+            f"Estimation of distribution in {field} (skew)",
+            data_set[field].skew(),
+            f"in {field} under zero values: {under_zero_error}"
+        )
 
     return data_set

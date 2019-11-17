@@ -15,9 +15,12 @@ from scipy.ndimage.filters import gaussian_filter
 
 cdef int SPACE_SIZE = 64
 cdef double LIGHTNESS_LIMIT = 0.35
+cdef double SCALE_RATIO = 1000
 cdef int MIN_SIZE_VALUE = 3
 cdef int MAX_LINE_LEN = int(1 + (SPACE_SIZE ** 2 * 2) ** 0.5)
+cdef int _ONE_FEATURE_COUNT = 7
 
+ONE_FEATURE_COUNT = int(_ONE_FEATURE_COUNT)
 
 cdef double math_sqrt(double value):
     """Faster then math.sqrt and np.sqrt in this case.
@@ -99,7 +102,7 @@ cdef int* _line_eq(int x1, int y1, int x2, int y2):
     a_dx = abs(dx)
     a_dy = abs(dy)
     if a_dx > a_dy:
-        k = dy / dx
+        k = dy / dx * SCALE_RATIO
         if x1 < x2:
             a = x1
             w = x2 - a
@@ -110,10 +113,10 @@ cdef int* _line_eq(int x1, int y1, int x2, int y2):
         for i in range(w):
             x = a + i
             result[i * 2] = x
-            result[i * 2 + 1] = int(0.5 + (x - x1) * k + y1)
+            result[i * 2 + 1] = int(round((x - x1) * k) // SCALE_RATIO + y1)
 
     elif a_dy > 0:
-        k = dx / dy
+        k = dx / dy * SCALE_RATIO
         if y1 < y2:
             a = y1
             w = y2 - a
@@ -123,7 +126,7 @@ cdef int* _line_eq(int x1, int y1, int x2, int y2):
 
         for i in range(w):
             y = a + i
-            result[i * 2] = int(0.5 + (y - y1) * k + x1)
+            result[i * 2] = int(round((y - y1) * k) // SCALE_RATIO + x1)
             result[i * 2 + 1] = y
 
     for i in range(w * 2, n):
@@ -250,10 +253,12 @@ cdef object _find_angle_features(
 ):
     """ Cython based method 'find_angle_features'.
     """
-    cdef int w, h, step_half, p_i, p_j, x, y, n, center_x, center_y, p_index1, p_index2, i, j
+    cdef int w, h, step_half, p_i, p_j, x, y, n
+    cdef center_x, center_y, p_index1, p_index2, i, j
     cdef double direc, val, cur_direc, distance, max_direction
+    cdef double a_direc, b_direc
     cdef int index, index1, x1, y1, index2, x2, y2, index3, x3, y3, line_len
-    cdef double distance_a, distance_b, angle_a, a, b
+    cdef double distance_a, distance_b, angle_c, angle_a, a, b
     cdef double estimation_distance_incenter
 
     w, h = img.shape
@@ -288,32 +293,33 @@ cdef object _find_angle_features(
     for i in range(n):
         x1, y1 = path_points[i]
         for j in range(n):
-            x2, y2 = path_points[j]
-            line = _line_eq(x1, y1, x2, y2)
-            p_j = -1
-            for p_i in range(MAX_LINE_LEN):
-                x = line[p_i * 2]
-                y = line[p_i * 2 + 1]
+            if distance_mx[i, j] == 0:
+                x2, y2 = path_points[j]
+                line = _line_eq(x1, y1, x2, y2)
+                p_j = -1
+                for p_i in range(line_len):
+                    x = line[p_i * 2]
+                    y = line[p_i * 2 + 1]
 
-                if x < 0:
-                    break
-                elif p_i == 0:
-                    p_j = 1
+                    if x < 0:
+                        break
+                    elif p_i == 0:
+                        p_j = 1
 
-                if not(img[x, y] > 0):
-                    p_j = 0
-                    break
+                    if not(img[x, y] > 0):
+                        p_j = 0
+                        break
 
-            distance = math_sqrt((y1 - y2) ** 2 + (x1 - x2) ** 2)
-            if p_j == 1:
-                distance_mx[i, j] = distance
-            elif p_j == 0:
-                # not direct
-                distance_mx[i, j] = -1 * distance
-            else:
-                distance_mx[i, j] = 0
+                distance = math_sqrt((y1 - y2) ** 2 + (x1 - x2) ** 2)
+                if p_j == 1:
+                    distance_mx[i, j] = distance_mx[j, i] = distance
+                elif p_j == 0:
+                    # not direct
+                    distance_mx[i, j] = distance_mx[j, i] = -1 * distance
+                else:
+                    distance_mx[i, j] = distance_mx[j, i] = 0
 
-            free(line)
+                free(line)
 
     # max line as first step in path
     (i, *_), (j, *_) = np.where(distance_mx == np.amax(distance_mx))
@@ -356,20 +362,37 @@ cdef object _find_angle_features(
         distance_a = distance_mx[index1, index2]
         distance_b = distance_mx[index1, index3]
         angle_a = _angle_calc(x1, y1, x2, y2, x3, y3)
+        distance = math_sqrt(float(y1 - center_y) ** 2 + float(x1 - center_x) ** 2) / max_direction
         if distance_a > distance_b:
             a = distance_a
             b = distance_b
-            direc = math_sqrt(float(center_y - y2) ** 2 + float(center_x - x2) ** 2) / max_direction
-            cur_direc = math_sqrt(float(center_y - y3) ** 2 + float(center_x - x3) ** 2) / max_direction
+            a_direc = math_sqrt(float(center_y - y2) ** 2 + float(center_x - x2) ** 2) / max_direction
+            b_direc = math_sqrt(float(center_y - y3) ** 2 + float(center_x - x3) ** 2) / max_direction
         else:
             a = distance_b
             b = distance_a
-            direc = math_sqrt(float(center_y - y3) ** 2 + float(center_x - x3) ** 2) / max_direction
-            cur_direc = math_sqrt(float(center_y - y2) ** 2 + float(center_x - x2) ** 2) / max_direction
+            a_direc = math_sqrt(float(center_y - y3) ** 2 + float(center_x - x3) ** 2) / max_direction
+            b_direc = math_sqrt(float(center_y - y2) ** 2 + float(center_x - x2) ** 2) / max_direction
 
-        distance = math_sqrt(float(y1 - center_y) ** 2 + float(x1 - center_x) ** 2) / max_direction
+        angle_c = _angle_calc(x1, y1, center_x, center_y, 0, 0)
+
+        if angle_c == 0:
+            angle_c = 180
+
+        if angle_a == 0:
+            angle_a = 180
+
+        if distance == 0:
+            distance = 0.1
+
+        if a_direc == 0:
+            a_direc = 0.1
+
+        if b_direc == 0:
+            b_direc = 0.1
+
         featues.append(
-            (a + b, distance, a, direc, b, cur_direc, np.deg2rad(angle_a))
+            (a + b, distance, np.deg2rad(angle_c), a, a_direc, b, b_direc, np.deg2rad(angle_a))
         )
 
     if len(featues) < result_size:
@@ -383,16 +406,16 @@ cdef object _find_angle_features(
     except (ValueError, IndexError):
         return None
 
-    angles = np.zeros((result_size, 6))
+    angles = np.zeros((result_size, _ONE_FEATURE_COUNT))
     featues.sort(reverse=True)
-    n = 6 * result_size
+    n = _ONE_FEATURE_COUNT * result_size
 
     if estimation_distance_incenter < dispersion_center_limit:
         return None
 
     j = 0
     for i in range(result_size):
-        if len(featues[i]) == 7:
+        if len(featues[i]) == _ONE_FEATURE_COUNT + 1:
             (
                 _,
                 angles[i, 0],
@@ -400,7 +423,8 @@ cdef object _find_angle_features(
                 angles[i, 2],
                 angles[i, 3],
                 angles[i, 4],
-                angles[i, 5]
+                angles[i, 5],
+                angles[i, 6],
             ) = featues[i]
             j += 1
 
@@ -429,7 +453,7 @@ def prepare_image(img: Image, blur_sigma: int = 2) -> np.array:
     if img_m is None:
         raise TypeError("Image size problem")
 
-    img_m = gaussian_filter(img_m, sigma=blur_sigma)
+    img_m = gaussian_filter(img_m, sigma=blur_sigma, truncate=4)
     val_mean = img_m.mean()
     img_m = img_m - val_mean
     img_m *= img_m > 0
@@ -441,19 +465,21 @@ def find_angle_features(
     img: np.array,
     step: int = 6,
     result_size: int = 6,
-    dispersion_center_limit: float = 0.1,
+    dispersion_center_limit: float = 0.2,
     show: bool = False,
     with_label: int = None
 ) -> np.array:
     """Create features from image as array with:
     [
         distance from angle point C1 to center,
+        angle c1
         straight line A1 length,
         distance from angle point A1 to center,
         straight line B1 length,
         distance from angle point B1 to center,
         angle a1,
         distance from angle point C2 to center,
+        angle c1
         straight line A2 length,
         distance from angle point A2 to center,
         straight line B2 length,
@@ -461,6 +487,7 @@ def find_angle_features(
         angle a2,
         ...
         distance from angle point C<result_size> to center,
+        angle c<result_size>
         straight line A<result_size> length,
         distance from angle point A<result_size> to center,
         straight line B<result_size> length,
@@ -470,6 +497,8 @@ def find_angle_features(
     """
     #print("Cython version 'find_angle_features'.")
     assert not show, "Not supported in optimized method."
+    if with_label is None:
+        with_label = -1
 
     return _find_angle_features(
         img, step, result_size, dispersion_center_limit, with_label
