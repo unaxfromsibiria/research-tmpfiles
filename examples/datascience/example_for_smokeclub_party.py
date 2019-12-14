@@ -54,6 +54,78 @@ def directions_py_cached(size: int, point: tuple, with_points: list) -> list:
 
     return list(map(cache.get, with_points))
 
+# in Cython
+# from distutils.core import setup
+# from distutils.extension import Extension
+# from Cython.Build import cythonize
+#
+# modules = [
+#     Extension(
+#         "directions",
+#         ["directions.pyx"],
+#         extra_compile_args=[
+#             "-O3",
+#             "-ffast-math",
+#             "-march=native",
+#             "-ftree-loop-distribution",
+#             "-floop-nest-optimize",
+#             "-floop-block",
+#         ],
+#         language="c"
+#     )
+# ]
+# 
+# setup(
+#     ext_modules=cythonize(
+#         modules,
+#         compiler_directives={
+#             "initializedcheck": False,
+#             "nonecheck": False,
+#             "language_level": 3,
+#             "infer_types": True,
+#             "boundscheck": False,
+#             "cdivision": True,
+#         }
+#     )
+# )
+#
+# import math
+# from libc.stdlib cimport malloc, free, realloc
+# 
+# 
+# cdef list _directions(object point, object with_points):
+#     """Only cython.
+#     """
+#     cdef int dimension = len(point)
+#     cdef int n = len(with_points)
+#     cdef int i, j
+#     cdef double s, location, with_location
+#     cdef double *points = <double *>malloc(sizeof(double) * n * dimension)
+#     cdef double *point_loc = <double *>malloc(sizeof(double) * dimension)
+# 
+#     for i in range(dimension):
+#         point_loc[i] = point[i]
+#         for j in range(n):
+#             points[j * dimension + i] = with_points[j][i]
+# 
+#     result = []
+#     for i in range(n):
+#         s = 0
+#         for j in range(dimension):
+#             s += math.pow(points[i * dimension + j] - point_loc[j], 2)
+# 
+#         result.append(round(math.sqrt(s), 2))
+# 
+#     free(points)
+#     free(point_loc)
+#     return result
+# 
+# 
+# def directions_pyx(point: tuple, with_points: list) -> list:
+#     """Api method.
+#     """
+#     return _directions(point, with_points)
+
 
 point = (3, 7, 12, 19)
 size = 32
@@ -73,6 +145,7 @@ points = [
 
 # %timeit directions_py_cached(size, point, points)
 
+# %timeit directions_pyx(point, points)
 
 # # example 2 # #
 # Search for the worst sensor.
