@@ -4,7 +4,7 @@
 
 | service | description |
 | --- | ----------- |
-| actual_rate | service of getting actual rates from external service (periodic polling with aiohttp) |
+| actual_rate | service of getting actual rates from external API (periodic polling with aiohttp) |
 | ps_common | main service API based on DRF and Django admin ui |
 | rate_source_mock | mock of external rate service to getting actual data (random values +- %5) |
 | deployment | dockerfiles (used in docker-compose.yml) |
@@ -41,3 +41,7 @@ Type "help", "copyright", "credits" or "license" for more information.
 >>> data = get_actual_exchange_rates(logger)
 2020-02-02T12:30:26.910     INFO stdout api.py:119 From 'http://actual_rate_api:8000/actual_rates.json' rates for CAD,HKD,ISK,PHP,DKK,HUF,CZK,GBP,RON,SEK,IDR,INR,BRL,RUB,HRK,JPY,THB,CHF,EUR,MYR,BGN,TRY,CNY,NOK,NZD,ZAR,USD,MXN,SGD,AUD,ILS,KRW,PLN
 ~~~
+
+### Tests
+
+There are tests only for main internal API methods with simple cases (on Django unittest).
