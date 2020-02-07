@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!DOCTYPE report>
-<report wallet="{{wallet}}" start_date="{{start_date}}" end_date="{{end_date}}">
-   <rows>
-   {% for row in rows %}
-      <row amount="{{row.amount}}" balance="{{row.balance}}" from="{{row.w_from}}" to="{{row.w_to}}">{{row.dt}}</row>
-   {% endfor %}
-   </rows>
-</report>
