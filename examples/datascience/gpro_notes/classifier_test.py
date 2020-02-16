@@ -29,6 +29,7 @@ def roc_auc_score_all(
 ):
     unique = result.unique()
     other_cls = set()
+    unique.sort()
 
     for cls_name in unique:
         other_cls.update(val for val in unique if val != cls_name)
@@ -78,14 +79,15 @@ def open_dataset(
 
     fields = list(set(fields) - zero_fields)
     fields.sort(key=num_and_name_field_sort)
-    result = data[[
+    fields = [
         "instrument",
         "tempo",
         "volume",
         "balance",
         "ppqn_duration",
         *fields
-    ]].copy(), fields
+    ]
+    result = data[fields].copy(), fields
 
     return result
 
@@ -100,10 +102,11 @@ def run_test(
     """
     dataset, fields = open_dataset(path)
     gc.collect()
+    dataset.instrument = dataset.instrument.astype("int")
     train = dataset.sample(frac=sample_rate, random_state=random_state)
     test = dataset.drop(train.index)
-    y_test = test.instrument.astype("int")
-    y_train = train.instrument.astype("int")
+    y_test = test.instrument
+    y_train = train.instrument
     x_train = train[fields]
     x_test = test[fields]
     # defult
