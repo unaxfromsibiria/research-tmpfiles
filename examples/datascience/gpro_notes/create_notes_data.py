@@ -12,17 +12,20 @@ import gc
 import itertools
 import os
 import re
+import sys
 import time
 import typing
 
 import guitarpro
 import pandas as pd
+from guitarpro.models import Measure, Voice
 
 word_re = re.compile(r"\s+")
 # MIDI accuracy?
 GROUP_PPQN_DURATION = 960 * 4 * 30
 # notes in one futeres row (probably it will change to less)
-NOTE_COUNT = 180
+NOTE_COUNT = 250
+BEAT_COUNT_LIMIT = 230
 DEBUG = False  # to see asyncio mode
 
 NOTE_PROPERTY = (
@@ -35,6 +38,8 @@ NOTE_PROPERTY = (
 )
 
 NOTE_FIELDS = (
+    "measure_index",
+    "beat_index",
     "type",
     "value",
     "string",
@@ -56,8 +61,7 @@ COMMON_FIELDS = (
     "volume",
     "balance",
     "ppqn_duration",
-    "notes",
-    "parts",
+    "beats",
 )
 
 FORMATS = ("gp4", "gp5", "gp3")
@@ -109,6 +113,21 @@ def note_features(note: guitarpro.Note) -> tuple:
     )
 
 
+def get_main_voice(measure: Measure) -> Voice:
+    """Voice with max notes count.
+    """
+    n = len(measure.voices)
+    if n == 1:
+        return measure.voices[0]
+
+    counts = [0] * n
+    for index, voice in enumerate(measure.voices):
+        for beat in voice.beats:
+            counts[index] += len(beat.notes)
+
+    return measure.voices[counts.index(max(counts))]
+
+
 def track_part(file_path: str) -> typing.Generator[tuple, None, None]:
     """Notes by parts as rows.
     """
@@ -132,11 +151,8 @@ def track_part(file_path: str) -> typing.Generator[tuple, None, None]:
             instrument = track.channel.instrument
             volume = track.channel.volume
             balance = track.channel.balance
-            total_duration = 0
-            note_groups = [[]]
-            group_index = 0
-            duration = 0
-            n_count = 0
+            total_duration = duration = beat_count = measure_index = 0
+            notes = []
 
             for measure in track.measures:
                 m_n = measure.header.length
@@ -144,39 +160,44 @@ def track_part(file_path: str) -> typing.Generator[tuple, None, None]:
                 total_duration += m_n
                 if duration > GROUP_PPQN_DURATION:
                     duration = m_n
-                    note_groups.append([])
-                    group_index += 1
 
-                for voice in measure.voices:
-                    for beat in voice.beats:
-                        for note in beat.notes:
-                            n_count += 1
-                            note_groups[group_index].append(
-                                note_features(note)
-                            )
-
-            for group in note_groups:
-                n = len(group)
-                if n < NOTE_COUNT:
+                voice = get_main_voice(measure)
+                if voice is None:
                     continue
 
-                for index in range(n // NOTE_COUNT):
-                    notes = group[index * NOTE_COUNT:(index + 1) * NOTE_COUNT]
-                    if len(notes) < NOTE_COUNT:
-                        continue
+                measure_index += 1
+                beat_index = 0
+                start_notes_count = len(notes)
+                for beat in voice.beats:
+                    beat_notes = beat.notes
+                    if beat_notes:
+                        beat_count += 1
+                        beat_index += 1
+                        for note in beat_notes:
+                            notes.append(
+                                (measure_index, beat_index, *note_features(note))  # noqa
+                            )
 
-                    yield (
-                        artist,
-                        name,
-                        gpro.tempo,
-                        instrument,
-                        volume,
-                        balance,
-                        total_duration,
-                        n_count,
-                        len(group),
-                        *itertools.chain(*notes),
-                    )
+                if start_notes_count == len(notes):
+                    # empty measure
+                    measure_index -= 1
+
+            n = len(notes)
+
+            if beat_count < BEAT_COUNT_LIMIT or n < NOTE_COUNT:
+                continue
+
+            yield (
+                artist,
+                name,
+                gpro.tempo,
+                instrument,
+                volume,
+                balance,
+                total_duration,
+                beat_count,
+                *itertools.chain(*(notes[:NOTE_COUNT])),
+            )
 
 
 def read_notes_create(
@@ -321,7 +342,7 @@ async def run_async_create_csv(
 
 def create_csv_file(
     base_path: str, csv_file: str, file_count_limit: int = 0
-) -> int:
+):
     """Record csv. Default method.
     """
     start_time = time.monotonic()
@@ -352,3 +373,15 @@ def async_create_csv(base_path: str, csv_file: str, file_count_limit: int = 0):
         run_async_create_csv(base_path, csv_file, file_count_limit)
     )
     print("Time: ", time.monotonic() - start_time)
+
+
+def run():
+    """Run from shell.
+    python -c "from create_notes_data import run; run()" data/gp_files/ dataset/notes.csv
+    """
+    *_, path, csv_file_path = sys.argv
+    print(
+        "Search files from", path, "\n"
+        "Save to file", csv_file_path,
+    )
+    async_create_csv(path, csv_file_path)
