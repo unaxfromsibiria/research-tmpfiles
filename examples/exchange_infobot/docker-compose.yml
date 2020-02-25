@@ -1,0 +1,15 @@
+version: "3.7"
+
+services:
+
+  exchange_bot:
+    build:
+      context: .
+      dockerfile: bot.Dockerfile
+    restart: on-failure:5
+    environment:
+      - BOT_TOKEN=____enter_token______
+      - ACTUAL_INTERVAL=15
+      - DB_FILE=/data/rates_db.csv
+    volumes:
+      - .data:/data
