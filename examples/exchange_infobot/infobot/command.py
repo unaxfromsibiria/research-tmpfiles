@@ -5,7 +5,6 @@ import re
 
 from .common import logger
 from .storage import RateStorage
-from .img_helper import create_image
 
 
 search_parts = re.compile(r"\S+")
@@ -165,18 +164,9 @@ class HistoryRateCommand(Command):
         count, currency_1, currency_2 = self.clear_data
         end = datetime.now().date()
         begin = end - timedelta(count)
-        img = None
-        data, err = await self.storage.request_history(
+        result, img = await self.storage.history_chart(
             begin=begin, end=end, target=currency_1, currency=currency_2
         )
-        if err:
-            result = err
-        else:
-            n = len(data)
-            result = f"{n} values"
-            if n > 0:
-                img = create_image(data).read()
-
         return result, img
 
 

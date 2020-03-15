@@ -12,7 +12,7 @@ ax.set_title("Rate at date")
 ax.grid(True)
 
 
-def create_image(data: pd.DataFrame) -> io.BytesIO:
+def create_image(data: pd.DataFrame) -> bytes:
     """Create image with rate table.
     """
     dia = data.plot()
@@ -20,4 +20,4 @@ def create_image(data: pd.DataFrame) -> io.BytesIO:
     buffer = io.BytesIO()
     img_src.savefig(buffer)
     buffer.seek(0)
-    return buffer
+    return buffer.read()

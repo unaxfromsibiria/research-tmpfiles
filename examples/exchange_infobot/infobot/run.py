@@ -10,7 +10,14 @@ from .storage import RateStorage
 
 bot = Bot(token=env_var_line("BOT_TOKEN"))
 dp = Dispatcher(bot)
-cmd_handler = CommamdHandler(RateStorage())
+storage = RateStorage()
+cmd_handler = CommamdHandler(storage)
+
+
+async def setup_loop(dispatcher):
+    """Setup actual loop from dispatcher into storage.
+    """
+    storage.actual_loop = dispatcher.loop
 
 
 @dp.message_handler()
@@ -26,5 +33,9 @@ async def make_answer(message: types.Message):
     else:
         await message.answer(msg)
 
-
-executor.start_polling(dp, skip_updates=True)
+try:
+    executor.start_polling(
+        dp, skip_updates=True, on_startup=setup_loop
+    )
+finally:
+    storage.close()

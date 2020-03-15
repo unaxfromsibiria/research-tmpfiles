@@ -1,5 +1,7 @@
+import asyncio
 import os
 import typing
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date
 from datetime import datetime
 from decimal import Decimal
@@ -13,8 +15,36 @@ from .common import BASE_PATH
 from .common import env_var_int
 from .common import env_var_line
 from .common import logger
+from .img_helper import create_image
 
 MIN_DT = pd.Timedelta("1M")
+
+
+def save_new_rates(
+    path: str, source: pd.DataFrame, dt: pd.Timestamp, rates: pd.Series
+) -> pd.DataFrame:
+    """Update data and save data actual rows.
+    """
+    new_data: pd.DataFrame = source.append(
+        pd.DataFrame({
+            "rates": rates.values,
+            "currency": rates.index,
+            "date": dt,
+            "created": datetime.now()
+        })
+    )
+    new_data.sort_values("created", inplace=True)
+    new_data.drop_duplicates(
+        ["currency", "date"], keep="last", inplace=True
+    )
+    new_data.index = range(len(new_data))
+    try:
+        new_data.to_csv(path, index=False)
+    except Exception as err:
+        logger.error(f"Save in '{path}' error: {err}")
+        return source
+    else:
+        return new_data
 
 
 def create_history_table(response_data: dict) -> pd.DataFrame:
@@ -48,15 +78,33 @@ class RateStorage:
     db_file_path: str = ""
     actual_interval: int = 0  # in minutes
     data: pd.DataFrame
+    executor: ThreadPoolExecutor
+    actual_loop: asyncio.AbstractEventLoop
 
     service_urls: typing.Tuple[str, str] = (
         "https://api.exchangeratesapi.io/latest/",
         "https://api.exchangeratesapi.io/history/",
     )
 
-    def __init__(self, db_path: str = ""):
+    @property
+    def loop(self) -> asyncio.AbstractEventLoop:
+        if self.actual_loop is None:
+            self.actual_loop = asyncio.get_running_loop()
+
+        return self.actual_loop
+
+    def __init__(self, db_path: str = "", pool_workers: int = 0):
         """Setup from env options.
         """
+        self.actual_loop = None
+        if pool_workers <= 0:
+            pool_workers = os.cpu_count() // 2
+            if pool_workers < 2:
+                pool_workers = 2
+
+        self.executor = ThreadPoolExecutor(
+            max_workers=pool_workers, thread_name_prefix="storage_"
+        )
         self.db_file_path = db_file_path = (
             db_path or
             env_var_line("DB_FILE") or
@@ -82,24 +130,10 @@ class RateStorage:
         )
         self.data = data
 
-    def save_new_rates(self, dt: pd.Timestamp, rates: pd.Series):
-        """Update data and save data actual rows.
+    def close(self):
+        """Finishing of storage usage.
         """
-        new_data: pd.DataFrame = self.data.append(
-            pd.DataFrame({
-                "rates": rates.values,
-                "currency": rates.index,
-                "date": dt,
-                "created": datetime.now()
-            })
-        )
-        new_data.sort_values("created", inplace=True)
-        new_data.drop_duplicates(
-            ["currency", "date"], keep="last", inplace=True
-        )
-        new_data.index = range(len(new_data))
-        self.data = new_data
-        new_data.to_csv(self.db_file_path, index=False)
+        self.executor.shutdown()
 
     async def update(
         self, currency: str, param: str = "base"
@@ -128,8 +162,13 @@ class RateStorage:
                             else:
                                 new_retes = data.rates
 
-                            self.save_new_rates(
-                                data.date.astype("datetime64").max(), new_retes
+                            self.data = await self.loop.run_in_executor(
+                                self.executor,
+                                save_new_rates,
+                                self.db_file_path,
+                                self.data,
+                                data.date.astype("datetime64").max(),
+                                new_retes
                             )
                             n = len(new_retes)
                     else:
@@ -175,8 +214,9 @@ class RateStorage:
                     if resp.status == aiohttp.web.HTTPOk.status_code:
                         new_data = await resp.json()
                         if isinstance(new_data, dict):
-                            data = create_history_table(new_data)
-
+                            data = await self.loop.run_in_executor(
+                                self.executor, create_history_table, new_data
+                            )
                     else:
                         error = await resp.json()
                         if error:
@@ -190,6 +230,32 @@ class RateStorage:
             error = "Intrtnal error"
 
         return data, error
+
+    async def history_chart(
+        self,
+        *,
+        begin: date,
+        end: date,
+        target: str,
+        currency: str = "",
+    ) -> typing.Tuple[str, bytes]:
+        """
+        """
+        img: bytes = b""
+        data, err = await self.request_history(
+            begin=begin, end=end, target=target, currency=currency
+        )
+        if err:
+            result = err
+        else:
+            n = len(data)
+            result = f"{n} values"
+            if n > 0:
+                img: bytes = await self.loop.run_in_executor(
+                    self.executor, create_image, data
+                )
+
+        return result, img
 
     async def is_rate_actual(
         self, currency: str, to_dt: datetime = None
