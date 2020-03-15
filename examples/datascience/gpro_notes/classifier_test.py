@@ -8,18 +8,19 @@ import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import roc_auc_score
 
-regexp_note_field = re.compile(r"n([0-9]+)_([\w]+)")
+regexp_note_field = re.compile(r"b([0-9]+)_n([0-9]+)_([\w]+)")
 
 
-def num_and_name_field_sort(field: str) -> tuple:
-    index = 0
+def num_and_name_field_sort(field: str) -> typing.Tuple[int, int, str]:
+    beat = note = 0
     name = ""
     r_search = regexp_note_field.search(field)
     if r_search:
-        index, name = r_search.groups()
-        index = int(index)
+        beat, note, name = r_search.groups()
+        beat = int(beat)
+        note = int(note)
 
-    return (index, name)
+    return (beat, note, name)
 
 
 def roc_auc_score_all(
@@ -44,52 +45,48 @@ def roc_auc_score_all(
 
 def open_dataset(
     path: str,
-    relevance_limit_percent: float = 0.5
+    relevance_limit_percent: float = 0.5,
+    with_names: bool = False
 ) -> typing.Tuple[pd.DataFrame, typing.List[str]]:
     """Notes and volume.
     """
     data = pd.read_csv(path, sep=";", error_bad_lines=False)
-    fields = []
+    main_fields = []
     data.insert(0, "rand", np.random.random(len(data)))
     data.sort_values(["rand"], inplace=True)
 
-    fields_class = set()
     for field in data.columns:
         if regexp_note_field.search(field):
-            fields.append(field)
-            *_, cls_name = field.split("_")
-            fields_class.add(cls_name)
+            main_fields.append(field)
 
-    # search useless zero-features.
-    fields_class = sorted(fields_class)
-    zero_fields = set()
     n = len(data)
     print(f"Dataset size {n}")
 
-    for field in fields_class:
-        part_fields = [
-            field_value
-            for field_value in fields
-            if f"_{field}" in field_value
-        ]
-        no_zero_percent = (data[part_fields] != 0).sum().sum() / n * 100
-        if no_zero_percent < relevance_limit_percent:
-            print(f"Useless fields 'n[i..n]_{field}'")
-            zero_fields.update(part_fields)
-
-    fields = list(set(fields) - zero_fields)
-    fields.sort(key=num_and_name_field_sort)
+    main_fields.sort(key=num_and_name_field_sort)
     fields = [
         "instrument",
         "tempo",
         "volume",
         "balance",
         "ppqn_duration",
-        *fields
+        "measure_count",
+        "measure_occupancy",
+        *main_fields
     ]
-    result = data[fields].copy(), fields
+    if with_names:
+        fields.insert(0, "name")
+        fields.insert(0, "artist")
 
-    return result
+    result: pd.DataFrame = data[fields].copy()
+    for field in (
+        "volume", "tempo", "balance", "ppqn_duration", "measure_count", "measure_occupancy", *main_fields  # noqa
+    ):
+        # #
+        result[field] = result[field].astype(float)
+
+    result.instrument = result.instrument.astype(int)
+
+    return result, fields
 
 
 def run_test(
