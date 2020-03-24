@@ -69,8 +69,7 @@ def open_dataset(
         "volume",
         "balance",
         "ppqn_duration",
-        "measure_count",
-        "measure_occupancy",
+        "measure_index",
         *main_fields
     ]
     if with_names:
@@ -79,10 +78,13 @@ def open_dataset(
 
     result: pd.DataFrame = data[fields].copy()
     for field in (
-        "volume", "tempo", "balance", "ppqn_duration", "measure_count", "measure_occupancy", *main_fields  # noqa
+        "volume", "tempo", "balance", "ppqn_duration", "measure_index", *main_fields  # noqa
     ):
         # #
-        result[field] = result[field].astype(float)
+        try:
+            result[field] = result[field].astype(float)
+        except Exception as err:
+            raise TypeError(f"In field {field}: {err}")
 
     result.instrument = result.instrument.astype(int)
 

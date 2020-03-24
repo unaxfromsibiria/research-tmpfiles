@@ -17,7 +17,7 @@ from classifier_test import regexp_note_field
 
 from create_notes_data import BEAT_COUNT
 from create_notes_data import NOTE_IN_BEAT_COUNT
-from create_notes_data import NOTE_VIEW_FIELDS
+from create_notes_data import NOTE_FIELDS
 
 
 def reshape_dataset(dataset: pd.DataFrame, fields: list) -> np.array:
@@ -29,27 +29,23 @@ def reshape_dataset(dataset: pd.DataFrame, fields: list) -> np.array:
             note_fields.append(field)
 
     n = len(dataset)
-    m = len(NOTE_VIEW_FIELDS)
+    m = len(NOTE_FIELDS)
     common_fields = [
         "tempo",
         "instrument",
         "volume",
         "balance",
         "ppqn_duration",
-        "ppqn_duration",
-        "measure_count",
-        "measure_occupancy",
+        "measure_index",
     ]
     # dimension of position in time
     k = BEAT_COUNT * NOTE_IN_BEAT_COUNT
-    data = np.zeros((n, k + 2, m))
+    data = np.zeros((n, k + 1, m))
     note_fields.sort(key=num_and_name_field_sort)
-    data[:, 2:, :] = np.reshape(
+    data[:, 1:, :] = np.reshape(
         dataset[note_fields].values, (n, k, m)
     )
-    data[:, :2, :] = np.reshape(
-        dataset[common_fields].values, (n, 2, m)
-    )
+    data[:, 0, :len(common_fields)] = dataset[common_fields].values
 
     return data
 
@@ -90,10 +86,9 @@ def run_test(
         "sec."
     )
     model = Sequential([
-        LSTM(64, return_sequences=True, input_shape=(time_dimension, features_dimension)),  # noqa
-        LSTM(64, return_sequences=True),
-        LSTM(64),
-        Dense(cls_count * 2),
+        LSTM(32, return_sequences=True, input_shape=(time_dimension, features_dimension)),  # noqa
+        LSTM(32, return_sequences=True),
+        LSTM(32),
         Dense(cls_count, activation="softmax")
     ])
     model.compile(

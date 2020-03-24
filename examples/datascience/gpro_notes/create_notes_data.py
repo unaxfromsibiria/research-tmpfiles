@@ -9,7 +9,6 @@
 
 import asyncio
 import gc
-import itertools
 import os
 import re
 import sys
@@ -25,9 +24,8 @@ word_re = re.compile(r"\s+")
 # MIDI accuracy?
 GROUP_PPQN_DURATION: int = 960 * 4 * 30
 # notes in one futeres row (probably it will change to less)
-NOTE_IN_BEAT_COUNT: int = 7
-BEAT_COUNT: int = 280  # 175
-MIN_TOTAL_BEAT_COUNT: int = 32
+NOTE_IN_BEAT_COUNT: int = 8
+BEAT_COUNT: int = 32  # 128
 DEBUG: bool = False  # to see asyncio mode
 
 NOTE_MAX_STRING: int = 7
@@ -36,12 +34,6 @@ NOTE_TYPE_SIZE: int = max(
     NoteType.normal.value,
     NoteType.rest.value,
     NoteType.tie.value
-)
-
-trill_values = (
-    (21, 32),
-    (9, 16),
-    (-np.inf, -np.inf),
 )
 
 slide_values = {
@@ -85,14 +77,15 @@ def extract_trill_intensity(effect: NoteEffect) -> int:
     TrillEffect(fret=14, duration=Duration(value=32, isDotted=False, isDoubleDotted=False, tuplet=Tuplet(enters=1, times=1)))
     """
     fret = effect.trill.fret
-    duration = effect.trill.duration.value
-    # research
-    print(f"trill {fret} {duration}")
+    return fret
 
-    return next(
-        i for i, (in_fret, in_dur) in enumerate(trill_values, 1)
-        if fret >= in_fret and duration >= in_dur
-    )
+
+def extract_trill_duration(effect: NoteEffect) -> int:
+    """Only as possible combinations.
+    TrillEffect(fret=14, duration=Duration(value=32, isDotted=False, isDoubleDotted=False, tuplet=Tuplet(enters=1, times=1)))
+    """
+    duration = effect.trill.duration.value
+    return duration
 
 
 NOTE_PROPERTY: tuple = (
@@ -102,6 +95,7 @@ NOTE_PROPERTY: tuple = (
     ("isGrace", extract_is_exists_effect),
     ("isBend", extract_is_exists_effect),
     ("isTrill", extract_trill_intensity),
+    ("isTrill", extract_trill_duration),
     ("isTremoloPicking", extract_is_exists_effect),
     ("isFingering", extract_is_exists_effect),
     ("isHarmonic", extract_harmonic),
@@ -109,27 +103,21 @@ NOTE_PROPERTY: tuple = (
 )
 
 NOTE_FIELDS: tuple = (
-    "value",
     "string",
     "type",
+    "value_rate",
     "duration",
     "swap",
     "hammer",
     "vibrato",
     "grace",
     "bend",
-    "trill",
+    "trill_fret",
+    "trill_duration",
     "tremoloPicking",
     "fingering",
     "harmonic",
     "slides",
-)
-
-NOTE_VIEW_FIELDS: tuple = (
-    "string",
-    "type",
-    "value_rate",
-    "comb_feature",
 )
 
 COMMON_FIELDS: tuple = (
@@ -140,51 +128,10 @@ COMMON_FIELDS: tuple = (
     "volume",
     "balance",
     "ppqn_duration",
-    "measure_count",
-    "measure_occupancy",
+    "measure_index",
 )
 
 FORMATS: tuple = ("gp4", "gp5", "gp3")
-
-
-combination_index: typing.Dict[tuple, float] = {
-    (i_dur, i_swap, i_ham, i_vib, i_gr, i_bend, i_trill, i_tr, i_fing, i_har, i_sl): 0  # noqa
-    # duration
-    for i_dur in (0, 1)
-    # swap
-    for i_swap in (0, 1)
-    # hammer
-    for i_ham in (0, 1)
-    # vibrato
-    for i_vib in (0, 1)
-    # grace
-    for i_gr in (0, 1)
-    # bend
-    for i_bend in (0, 1)
-    # trill
-    for i_trill in range(0, len(trill_values) + 1)
-    # tremoloPicking
-    for i_tr in (0, 1)
-    # fingering
-    for i_fing in (0, 1)
-    # harmonic
-    for i_har in range(0, 6)
-    # slides
-    for i_sl in range(0, 7)
-}
-
-print("Note combinations", len(combination_index))
-
-
-for i, combination in enumerate(sorted(combination_index.keys()), start=1):
-    combination_index[combination] = i / len(combination_index)
-
-
-def note_feature_combination(*note_feature: float) -> float:
-    """Combination of note features as level.
-    """
-    combination = tuple(map(int, note_feature))
-    return combination_index[combination]
 
 
 def title_format(text: str) -> str:
@@ -209,45 +156,34 @@ def search_gpro_files(
 def note_features(
     note: guitarpro.Note, max_value: int = 100
 ) -> typing.Tuple[float, float, float, float]:
-    """Return note data (4 value) as NOTE_VIEW_FIELDS [
-        value,
-        string,
-        type,
-        combination(
-            # + 10 features
-            duration percent,
-            swap accidentals,
-            hammer,
-            vibrato,
-            is bend
-            is grace,
-            is trill,
-            is tremoloPicking,
-            is fingering,
-            is harmonic,
-            slides,
-        )
+    """Return note data (15 value) as NOTE_FIELDS [
+        1 value,
+        2 string,
+        3 type,
+        4 duration percent,
+        5 swap accidentals,
+        6 hammer,
+        7 vibrato,
+        8 is bend
+        9 is grace,
+        10 trill fret,
+        11 trill duration,
+        12 is tremoloPicking,
+        13 is fingering,
+        14 is harmonic,
+        15 slides,
     ]
     """
-    if max_value < note.value:
-        raise ValueError(f"Value of note {note.value}")
-
-    string_ratio = note.string / NOTE_MAX_STRING
-    if string_ratio > 1:
-        raise ValueError(f"Note string value: {note.string}")
-
     return (
-        note.value / max_value,
-        string_ratio,
-        note.type.value / NOTE_TYPE_SIZE,
-        note_feature_combination(
-            note.durationPercent,
-            int(note.swapAccidentals),
-            *(
-                extract(note.effect)
-                if getattr(note.effect, prop) else 0
-                for prop, extract in NOTE_PROPERTY
-            )
+        note.value,
+        note.string,
+        note.type.value,
+        note.durationPercent,
+        int(note.swapAccidentals),
+        *(
+            extract(note.effect)
+            if getattr(note.effect, prop) else 0
+            for prop, extract in NOTE_PROPERTY
         )
     )
 
@@ -273,7 +209,7 @@ def setup_fields(fields: typing.List[str]):
     for b_index in range(BEAT_COUNT):
         for n_index in range(NOTE_IN_BEAT_COUNT):
             fields.extend(
-                f"b{b_index}_n{n_index}_{field}" for field in NOTE_VIEW_FIELDS
+                f"b{b_index}_n{n_index}_{field}" for field in NOTE_FIELDS
             )
 
 
@@ -306,13 +242,11 @@ def track_part(file_path: str) -> typing.Generator[tuple, None, None]:
 
             duration = 0
             beat_index = measure_index = 0
-            note_sapce: np.array = np.zeros(
-                (BEAT_COUNT, NOTE_IN_BEAT_COUNT, len(NOTE_VIEW_FIELDS))
-            )
+            shape = (BEAT_COUNT, NOTE_IN_BEAT_COUNT, len(NOTE_FIELDS))
+            note_sapce: np.array = np.zeros(shape)
 
             for measure in track.measures:
-                m_n = measure.header.length
-                duration += m_n
+                duration = measure.header.length
 
                 voice = get_main_voice(measure)
                 if voice is None:
@@ -321,7 +255,9 @@ def track_part(file_path: str) -> typing.Generator[tuple, None, None]:
                 empty_measure = True
 
                 for beat in voice.beats:
-                    beat_index += 1
+                    if beat_index >= BEAT_COUNT:
+                        continue
+
                     beat_notes = beat.notes
                     if beat_notes:
 
@@ -333,29 +269,30 @@ def track_part(file_path: str) -> typing.Generator[tuple, None, None]:
                             notes_ch = note_features(note)
                             empty_measure = False
 
-                            if beat_index >= BEAT_COUNT:
-                                continue
+                            if beat_index < BEAT_COUNT:
+                                note_sapce[beat_index, n_index, :] = notes_ch  # noqa
 
-                            # print(">> ", notes_ch)
-                            note_sapce[beat_index, n_index, :] = notes_ch  # noqa
+                        beat_index += 1
 
                 if not empty_measure:
                     # not empty measure
                     measure_index += 1
 
-            if beat_index >= MIN_TOTAL_BEAT_COUNT:
-                yield (
-                    artist,
-                    name,
-                    gpro.tempo,
-                    instrument,
-                    volume,
-                    balance,
-                    duration / measure_count,
-                    measure_count,
-                    measure_index / measure_count,
-                    *(note_sapce.ravel()),
-                )
+                if beat_index >= BEAT_COUNT:
+                    yield (
+                        artist,
+                        name,
+                        gpro.tempo,
+                        instrument,
+                        int(volume or 0),
+                        balance,
+                        duration,
+                        measure_index,
+                        *(note_sapce.ravel()),
+                    )
+                    # next
+                    beat_index = 0
+                    note_sapce: np.array = np.zeros(shape)
 
 
 def read_notes_create(
