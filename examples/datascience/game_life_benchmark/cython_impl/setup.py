@@ -2,7 +2,7 @@ from distutils.core import setup
 from distutils.extension import Extension
 from Cython.Build import cythonize
 
-# python setup_*.py build_ext --inplace
+# python setup.py build_ext --inplace
 
 modules = [
     Extension(
@@ -12,13 +12,13 @@ modules = [
             "-O3",
             "-ffast-math",
             "-march=native",
-            # "-fopenmp",
+            "-fopenmp",
             "-ftree-loop-distribution",
             "-floop-nest-optimize",
             "-floop-block",
         ],
-        language="c"
-        # extra_link_args=["-fopenmp"],
+        language="c",
+        extra_link_args=["-fopenmp"],
     )
 ]
 

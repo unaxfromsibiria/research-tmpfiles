@@ -1,7 +1,7 @@
 
 import numpy as np
 
-from cython_impl.field_state import FieldState
+from cython_impl.field_state import FieldStateOmp
 
 from base_areal import BaseAreal
 
@@ -10,10 +10,10 @@ class Areal(BaseAreal):
     """Steps driven by Cython.
     """
 
-    field_state: FieldState
+    field_state: FieldStateOmp
 
     def init_field(self, size: int):
-        self.field_state = FieldState(size)
+        self.field_state = FieldStateOmp(size)
 
     def add_point(self, x: int, y: int):
         self.field_state.add_point(x, y)
