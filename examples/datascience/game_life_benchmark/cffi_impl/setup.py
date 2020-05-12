@@ -3,7 +3,7 @@ from cffi import FFI
 
 ffibuilder = FFI()
 
-ffibuilder.cdef("void make_step(int size, int *state, int *new_state);")
+ffibuilder.cdef("void make_step(int size, int *state);")
 ffibuilder.set_source(
     "field_state",
     """

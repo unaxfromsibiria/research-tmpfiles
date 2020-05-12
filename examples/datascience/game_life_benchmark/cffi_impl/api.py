@@ -16,12 +16,16 @@ class FieldState:
     shape: typing.Tuple[int, int]
     state: np.array
     _ffi: cffi.FFI
+    _state_c_ptr = None
 
     def __init__(self, size: int):
         self.size = size
         self.shape = (size + 2, size + 2)
         self.state = np.zeros(self.shape, dtype=np.intc)
         self._ffi = cffi.FFI()
+        self._state_c_ptr = self._ffi.cast(
+            "int *", self._ffi.from_buffer(self.state)
+        )
 
     def add_point(self, x: int, y: int):
         """Set point to 1.
@@ -36,13 +40,4 @@ class FieldState:
     def evolut(self):
         """Make new state.
         """
-        state_c_ptr = self._ffi.cast(
-            "int *", self._ffi.from_buffer(self.state)
-        )
-        new_state = self.state.copy()
-        new_state_c_ptr = self._ffi.cast(
-            "int *", self._ffi.from_buffer(new_state)
-        )
-        make_step(self.size, state_c_ptr, new_state_c_ptr)
-        del self.state
-        self.state = new_state
+        make_step(self.size, self._state_c_ptr)
