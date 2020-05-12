@@ -38,4 +38,5 @@ void make_step(int size, int *state)
             }
         }
     }
+    free(state_copy);
 }
