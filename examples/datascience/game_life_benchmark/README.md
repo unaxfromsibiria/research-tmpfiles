@@ -1,4 +1,4 @@
-# Example of Game Live implemented with Python, Numpy, Cython, Numba, CFFI, SciPy
+# Example of Game Live implemented with Python, Numpy, Cython, Numba, CFFI, SciPy, Rust+Ctypes
 
 About the algorithm https://en.wikipedia.org/wiki/Conway%27s_Game_of_Life
 
@@ -29,6 +29,8 @@ Average step execution time with areal size 128x128:
 
 - CFFI + Numpy: ~0.36 ms
 
+- Rust + Ctypes + Numpy: ~0.36 ms
+
 - Numba + Numpy: ~0.34 ms
 ```
 
@@ -44,6 +46,8 @@ Average step execution time with areal size 256x256:
 - CFFI + Numpy: ~1.35 ms
 
 - Cython: ~1.02 ms
+
+- Rust + Ctypes + Numpy: ~1.01 ms
 ```
 
 Average step execution time with areal size 420x420:
@@ -52,6 +56,8 @@ Average step execution time with areal size 420x420:
 - CFFI + Numpy: ~3.19 ms
 
 - Numba + Numpy: ~2.75 ms
+
+- Rust + Ctypes + Numpy: ~2.64 ms
 
 - Cython: ~2.24 ms
 
