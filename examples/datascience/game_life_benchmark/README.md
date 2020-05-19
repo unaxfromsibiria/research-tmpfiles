@@ -23,6 +23,8 @@ Average step execution time with areal size 128x128:
 
 - SciPy (correlate2d): ~1.5 ms
 
+- Rust with multithreading + Ctypes + Numpy: ~0.98 ms
+
 - Cython with OMP (4 cpu): ~0.96 ms
 
 - Cython: ~0.38 ms
@@ -39,6 +41,8 @@ Average step execution time with areal size 256x256:
 ```
 - SciPy (correlate2d): ~5.0 ms
 
+- Rust with multithreading + Ctypes + Numpy: ~2.26 ms
+
 - Numba + Numpy: ~1.40 ms
 
 - Cython with OMP (4 cpu): ~1.36 ms
@@ -53,6 +57,8 @@ Average step execution time with areal size 256x256:
 Average step execution time with areal size 420x420:
 
 ```
+- Rust with multithreading + Ctypes + Numpy: ~3.6 ms
+
 - CFFI + Numpy: ~3.19 ms
 
 - Numba + Numpy: ~2.75 ms

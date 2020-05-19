@@ -10,6 +10,7 @@
 
 import typing
 import ctypes
+import os
 import numpy as np
 
 from base_areal import BaseAreal
@@ -17,13 +18,14 @@ from base_areal import BaseAreal
 INT_PTR = ctypes.POINTER(ctypes.c_int32)
 
 
-class FieldState:
+class FieldStateMt:
     """State api class.
     """
     size: int
     shape: typing.Tuple[int, int]
     state: np.array
     lib = None
+    cpu: int = 1
 
     def __init__(self, size: int):
         self.size = size
@@ -33,8 +35,10 @@ class FieldState:
             "./rust_impl/target/release/librust_impl.so"
         )
         n = (size + 2) ** 2
-        lib.make_step.restype = ctypes.POINTER(ctypes.c_int32 * n)
+        lib.make_step_mt.restype = ctypes.POINTER(ctypes.c_int32 * n)
         self.lib = lib
+        self.cpu = int(os.cpu_count() or 0)
+        assert self.cpu >= 2, "Only for multiprocessor systems."
 
     def add_point(self, x: int, y: int):
         """Set point to 1.
@@ -49,8 +53,8 @@ class FieldState:
     def evolut(self):
         """Make new state.
         """
-        data_pointer = self.lib.make_step(
-            np.ctypeslib.as_ctypes(self.state), self.size
+        data_pointer = self.lib.make_step_mt(
+            np.ctypeslib.as_ctypes(self.state), self.size, self.cpu
         )
         self.state = np.ctypeslib.as_array(
             ctypes.cast(data_pointer, INT_PTR), shape=self.shape
@@ -58,13 +62,13 @@ class FieldState:
 
 
 class Areal(BaseAreal):
-    """Steps driven by Rust.
+    """Steps driven by Rust with multithreading.
     """
 
-    field_state: FieldState
+    field_state: FieldStateMt
 
     def init_field(self, size: int):
-        self.field_state = FieldState(size)
+        self.field_state = FieldStateMt(size)
 
     def add_point(self, x: int, y: int):
         self.field_state.add_point(x, y)
