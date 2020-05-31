@@ -61,11 +61,25 @@ Average step execution time with areal size 420x420:
 
 - CFFI + Numpy: ~3.19 ms
 
-- Numba + Numpy: ~2.75 ms
-
 - Rust + Ctypes + Numpy: ~2.64 ms
+
+- Numba + Numpy: ~2.43 ms
+
+- Numba with parallel + Numpy: ~2.33 ms
 
 - Cython: ~2.24 ms
 
-- Cython with OMP (4 cpu): ~1.75 ms
+- CFFI with Pthread + Numpy: ~2.04 ms
+
+- Cython with OMP (4 cpu): ~1.65 ms
+```
+
+Average step execution time with areal size 512x512:
+
+```
+- Numba with parallel + Numpy: ~3.12 ms
+
+- CFFI with Pthread + Numpy: ~3.08 ms
+
+- Cython with OMP (4 cpu): ~2.15 ms
 ```

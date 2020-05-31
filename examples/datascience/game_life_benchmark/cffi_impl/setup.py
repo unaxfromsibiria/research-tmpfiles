@@ -4,6 +4,7 @@ from cffi import FFI
 ffibuilder = FFI()
 
 ffibuilder.cdef("void make_step(int size, int *state);")
+ffibuilder.cdef("void make_step_th(int size, int th_count, int *state);")
 ffibuilder.set_source(
     "field_state",
     """
@@ -17,6 +18,8 @@ ffibuilder.set_source(
         "-ftree-loop-distribution",
         "-floop-nest-optimize",
         "-floop-block",
+        "-pthread",
+        "-lpthread",
     ]
 )
 
