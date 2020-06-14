@@ -40,6 +40,38 @@ pub extern "C" fn make_step(src: *const i32, size: i32) -> *mut i32 {
 }
 
 #[no_mangle]
+pub extern "C" fn make_step_update(src: *mut i32, size: i32) -> i32 {
+    let full_size: usize = (size + 2) as usize;
+    let len = (full_size * full_size) as usize;
+    let n = (size + 1) as usize;
+    let mut k: usize;
+    let mut m;
+
+    unsafe {
+        let arr = std::slice::from_raw_parts_mut(src, len);
+        let src_arr: Vec<i32> = arr.to_vec();
+
+        for i in 1..n {
+            for j in 1..n {
+                k = i + j * full_size;
+                m = 0;
+                for l in 0..NEIGHBORS_COUNT {
+                    if src_arr[(i as i32 + X_DELTA[l]) as usize + (j as i32 + Y_DELTA[l]) as usize * full_size] > 0 {
+                        m += 1;
+                    }
+                }
+                arr[k] = if (m == 3) || (src_arr[k] > 0 && m == 2) {
+                    1
+                } else {
+                    0
+                }
+            }
+        }
+    }
+    len as i32
+}
+
+#[no_mangle]
 pub extern "C" fn make_step_mt(src: *const i32, size: i32, cpu_count: i32) -> *mut i32 {
     let full_size: usize = (size + 2) as usize;
     let len = (full_size * full_size) as usize;

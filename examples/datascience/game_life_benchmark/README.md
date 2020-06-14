@@ -34,6 +34,8 @@ Average step execution time with areal size 128x128:
 - Rust + Ctypes + Numpy: ~0.36 ms
 
 - Numba + Numpy: ~0.34 ms
+
+- Rust (mut pointer) + Ctypes + Numpy: ~0.29 ms
 ```
 
 Average step execution time with areal size 256x256:
@@ -49,6 +51,8 @@ Average step execution time with areal size 256x256:
 
 - CFFI + Numpy: ~1.35 ms
 
+- Rust (mut pointer) + Ctypes + Numpy: ~1.05 ms
+
 - Cython: ~1.02 ms
 
 - Rust + Ctypes + Numpy: ~1.01 ms
@@ -62,6 +66,8 @@ Average step execution time with areal size 420x420:
 - CFFI + Numpy: ~3.19 ms
 
 - Rust + Ctypes + Numpy: ~2.64 ms
+
+- Rust (mut pointer) + Ctypes + Numpy: ~2.45 ms
 
 - Numba + Numpy: ~2.43 ms
 
