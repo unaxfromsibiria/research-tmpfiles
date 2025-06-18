@@ -89,7 +89,7 @@ pooch==1.8.2
 preshed==3.0.9
 prompt_toolkit==3.0.48
 propcache==0.2.0
-protobuf==5.28.3
+protobuf==5.29.5
 psutil==6.1.0
 pure_eval==0.2.3
 pycparser==2.22
