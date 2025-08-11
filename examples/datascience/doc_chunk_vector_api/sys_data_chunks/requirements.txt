@@ -1,0 +1,13 @@
+numpy
+pydantic
+pydantic_core
+psycopg2-binary
+sqlalchemy
+alembic<1.17
+pgvector
+pydantic-settings
+transformers
+sentence-transformers
+python-dotenv
+fastapi<0.118.0
+uvicorn<0.37.0
